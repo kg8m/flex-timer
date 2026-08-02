@@ -1266,11 +1266,22 @@
           $("#title").focus();
         }
 
-        document
-          .querySelectorAll('input[name="mode"]')
-          .forEach((el) =>
-            el.addEventListener("change", updateModeFieldsVisibility),
-          );
+        // Re-clicking the already-selected radio fires "click" but not
+        // "change" (its value doesn't change), yet should still refocus the
+        // title field. Track the selected value so "click" only re-runs the
+        // update for that no-op case, instead of doubling up with "change"
+        // whenever a click actually switches the mode.
+        let currentMode = $('input[name="mode"]:checked').value;
+
+        document.querySelectorAll('input[name="mode"]').forEach((el) => {
+          el.addEventListener("change", () => {
+            currentMode = el.value;
+            updateModeFieldsVisibility();
+          });
+          el.addEventListener("click", () => {
+            if (el.value === currentMode) updateModeFieldsVisibility();
+          });
+        });
 
         updateModeFieldsVisibility();
 
