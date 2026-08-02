@@ -255,6 +255,11 @@
         margin-left: auto;
       }
 
+      .list-summary h2 {
+        font-size: 16px;
+        margin: 0;
+      }
+
       .list-summary::-webkit-details-marker {
         display: none;
       }
@@ -297,6 +302,7 @@
 
       .timer.list-header {
         border-top: none;
+        opacity: 0.7;
       }
 
       .timer.trash-row {
@@ -533,6 +539,8 @@
               </span>
             </div>
 
+            <!-- display: none is the initial state;
+                 updateModeFieldsVisibility() toggles timeFieldEl.style.display based on the selected mode -->
             <div class="field" id="time-field" style="display: none">
               <label for="target-time">At time</label>
               <input id="target-time" name="target-time" type="time" step="1" />
@@ -548,14 +556,10 @@
 
       <details class="card list" id="timers-card" open>
         <summary class="list-summary">
-          <h2 style="font-size: 16px; margin: 0">Timers</h2>
+          <h2>Timers</h2>
         </summary>
         <div id="timers" role="region" aria-label="Timers">
-          <div
-            class="list-header timer"
-            aria-hidden="true"
-            style="opacity: 0.7"
-          >
+          <div class="list-header timer" aria-hidden="true">
             <div class="title">Title</div>
             <div class="when-remain">
               <div class="when">Ends At</div>
@@ -575,15 +579,17 @@
 
       <details class="card list" id="archive-card" open>
         <summary class="list-summary">
-          <h2 style="font-size: 16px; margin: 0">Archived</h2>
+          <h2>Archived</h2>
           <span class="help">Kept until you restart or delete them.</span>
         </summary>
         <div id="archive-empty" class="help">No archived timers.</div>
+        <!-- display: none is the initial state;
+             renderArchived() toggles archiveHeaderEl.style.display based on whether there are any archived timers -->
         <div
           class="timer list-header archive-row"
           id="archive-header"
           aria-hidden="true"
-          style="opacity: 0.7; display: none"
+          style="display: none"
         >
           <div class="title">Title</div>
           <div class="set">Set</div>
@@ -595,15 +601,17 @@
 
       <details class="card list" id="trash-card" open>
         <summary class="list-summary">
-          <h2 style="font-size: 16px; margin: 0">Trash</h2>
+          <h2>Trash</h2>
           <span class="help">Restorable for 5 minutes after deletion.</span>
         </summary>
         <div id="trash-empty" class="help">Trash is empty.</div>
+        <!-- display: none is the initial state;
+             renderTrash() toggles trashHeaderEl.style.display based on whether there are any trashed timers -->
         <div
           class="timer list-header trash-row"
           id="trash-header"
           aria-hidden="true"
-          style="opacity: 0.7; display: none"
+          style="display: none"
         >
           <div class="title">Title</div>
           <div class="set">Set</div>
