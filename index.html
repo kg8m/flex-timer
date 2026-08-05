@@ -326,16 +326,44 @@
 
       .title {
         display: flex;
-        align-items: center;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
         font-weight: 600;
         word-break: break-word;
         text-align: left;
+      }
+
+      .title-main {
+        display: flex;
+        align-items: center;
       }
 
       .mode-badge {
         display: inline-flex;
         margin-right: 6px;
         cursor: default;
+      }
+
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+
+      .tag {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--accent);
+        background: rgba(34, 197, 94, 0.12);
+        border-radius: 999px;
+        padding: 1px 8px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .tag:hover {
+        background: rgba(34, 197, 94, 0.22);
       }
 
       .when,
@@ -384,6 +412,59 @@
         align-items: center;
         gap: 8px;
         flex-wrap: wrap;
+      }
+
+      .tag-filter {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+
+      .tag-filter:empty {
+        display: none;
+        margin-bottom: 0;
+      }
+
+      .tag-filter-chip {
+        height: 26px;
+        border-radius: 999px;
+        padding: 0 10px;
+        font-size: 12px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--muted);
+      }
+
+      .tag-filter-chip:hover {
+        border-color: var(--muted);
+        background: rgba(156, 163, 175, 0.12);
+      }
+
+      .tag-filter-chip.active {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: rgba(34, 197, 94, 0.12);
+      }
+
+      .tag-filter-chip.active:hover {
+        background: rgba(34, 197, 94, 0.22);
+      }
+
+      .tag-filter-clear {
+        height: 26px;
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        font-size: 12px;
+        text-decoration: underline;
+        padding: 0 4px;
+      }
+
+      .tag-filter-clear:hover {
+        background: rgba(156, 163, 175, 0.12);
+        border-radius: 6px;
       }
 
       .sr-only {
@@ -516,12 +597,21 @@
 
           <div class="row">
             <div class="field">
-              <label for="title">Title (optional)</label>
+              <label
+                for="title"
+                data-tooltip="Use #tag to add tags, e.g. #work #break"
+              >
+                Title (optional)
+              </label>
               <input
                 id="title"
                 name="title"
-                placeholder="e.g., Tea / Meeting / Break"
+                placeholder="e.g., Tea #break / Meeting #work"
+                aria-describedby="title-hint"
               />
+              <span id="title-hint" class="sr-only">
+                Use #tag to add tags, e.g. #work #break
+              </span>
             </div>
 
             <div class="field" id="duration-field">
@@ -563,6 +653,7 @@
           <h2>Timers</h2>
           <span class="help">Timers will beep when finished.</span>
         </summary>
+        <div class="tag-filter" id="timers-tag-filter"></div>
         <div id="timers" role="region" aria-label="Timers">
           <div class="list-header timer" aria-hidden="true">
             <div class="title">Title</div>
@@ -587,6 +678,7 @@
           <h2>Archived</h2>
           <span class="help">Kept until you restart or delete them.</span>
         </summary>
+        <div class="tag-filter" id="archive-tag-filter"></div>
         <div id="archive-empty" class="help">No archived timers.</div>
         <!-- display: none is the initial state;
              renderArchived() toggles archiveHeaderEl.style.display based on whether there are any archived timers -->
@@ -609,6 +701,7 @@
           <h2>Trash</h2>
           <span class="help">Restorable for 5 minutes after deletion.</span>
         </summary>
+        <div class="tag-filter" id="trash-tag-filter"></div>
         <div id="trash-empty" class="help">Trash is empty.</div>
         <!-- display: none is the initial state;
              renderTrash() toggles trashHeaderEl.style.display based on whether there are any trashed timers -->
@@ -630,11 +723,11 @@
     <script>
       (() => {
         /*** State ***/
-        /** @type {{id:number,title:string,endAt:number,createdAt:number,notified:boolean,paused:boolean,pausedAt?:number,remainingAtPause?:number,originalDuration:number}[]} */
+        /** @type {{id:number,title:string,tags:string[],endAt:number,createdAt:number,notified:boolean,paused:boolean,pausedAt?:number,remainingAtPause?:number,originalDuration:number}[]} */
         let timers = [];
-        /** @type {{id:number,title:string,originalDuration:number,deletedAt:number}[]} */
+        /** @type {{id:number,title:string,tags:string[],originalDuration:number,deletedAt:number}[]} */
         let trash = [];
-        /** @type {{id:number,title:string,originalDuration:number,archivedAt:number}[]} */
+        /** @type {{id:number,title:string,tags:string[],originalDuration:number,archivedAt:number}[]} */
         let archived = [];
         let seq = 1;
 
@@ -663,6 +756,10 @@
               timers = parsed.timers || [];
               trash = parsed.trash || [];
               archived = parsed.archived || [];
+
+              for (const t of [...timers, ...trash, ...archived]) {
+                if (!Array.isArray(t.tags)) t.tags = [];
+              }
             }
           } catch (e) {
             console.warn("Failed to load from localStorage:", e);
@@ -728,6 +825,23 @@
           }
 
           return 0;
+        }
+
+        // Pull #tag tokens out of a title string instead of requiring a
+        // separate tags field: any "#" followed by non-whitespace becomes a
+        // tag (normalized like the old comma-separated input — trimmed,
+        // lowercased, deduped) and is removed from the displayed title.
+        function extractTagsFromTitle(rawTitle) {
+          const tags = [];
+          const title = String(rawTitle || "")
+            .replace(/#([^\s#]+)/g, (_, tag) => {
+              tags.push(tag.toLowerCase());
+              return "";
+            })
+            .replace(/\s+/g, " ")
+            .trim();
+
+          return { title, tags: [...new Set(tags)] };
         }
 
         // Resolve "HH:MM" or "HH:MM:SS" to the next occurrence of that time
@@ -966,9 +1080,100 @@
           return String(s).replace(/[&<>"']/g, (ch) => map[ch]);
         }
 
+        // Small pill row rendered under a timer's title (empty string, i.e.
+        // nothing rendered, when the timer has no tags). Each tag is
+        // clickable to toggle it in that list's tag filter (see the click
+        // handlers on listEl/trashListEl/archiveListEl below).
+        function tagsHtml(t) {
+          if (!t.tags || !t.tags.length) return "";
+
+          return html`
+            <div class="tags">
+              ${t.tags
+                .map(
+                  (tag) => html`
+                    <span class="tag" data-tag="${escapeHtml(tag)}">
+                      #${escapeHtml(tag)}
+                    </span>
+                  `,
+                )
+                .join("")}
+            </div>
+          `;
+        }
+
+        // Per-list tag filter state (OR match: a timer/trash/archive item is
+        // shown if it has any of the selected tags). Kept in memory only —
+        // intentionally not persisted, so filters reset on reload.
+        let timersTagFilter = new Set();
+        let archiveTagFilter = new Set();
+        let trashTagFilter = new Set();
+
+        function computeAvailableTags(items) {
+          const set = new Set();
+          for (const t of items) {
+            for (const tag of t.tags || []) set.add(tag);
+          }
+
+          return [...set].sort();
+        }
+
+        function matchesTagFilter(t, filterSet) {
+          if (!filterSet.size) return true;
+          return (t.tags || []).some((tag) => filterSet.has(tag));
+        }
+
+        function toggleTagInFilter(filterSet, tag) {
+          if (filterSet.has(tag)) {
+            filterSet.delete(tag);
+          } else {
+            filterSet.add(tag);
+          }
+        }
+
+        // Renders the tag chip bar for one list, offering every tag present
+        // among that list's own items (not just the currently filtered
+        // subset), so deselecting a tag doesn't remove it from the choices.
+        function renderTagFilterChips(containerEl, items, filterSet) {
+          const tags = computeAvailableTags(items);
+          if (!tags.length) {
+            containerEl.innerHTML = "";
+            return;
+          }
+
+          containerEl.innerHTML = html`
+            ${tags
+              .map(
+                (tag) => html`
+                  <button
+                    type="button"
+                    class="tag-filter-chip${filterSet.has(tag)
+                      ? " active"
+                      : ""}"
+                    data-tag="${escapeHtml(tag)}"
+                  >
+                    #${escapeHtml(tag)}
+                  </button>
+                `,
+              )
+              .join("")}
+            ${filterSet.size
+              ? html`<button type="button" class="tag-filter-clear">
+                  Clear filter
+                </button>`
+              : ""}
+          `;
+        }
+
+        const timersTagFilterEl = $("#timers-tag-filter");
+
         function render() {
+          renderTagFilterChips(timersTagFilterEl, timers, timersTagFilter);
+
           // sort by end time ascending
-          const sorted = [...timers].sort((a, b) => a.endAt - b.endAt);
+          const sorted = [...timers]
+            .filter((t) => matchesTagFilter(t, timersTagFilter))
+            .sort((a, b) => a.endAt - b.endAt);
 
           const timerEls = listEl.querySelectorAll(".timer:not(.list-header)");
           for (const timerEl of timerEls) {
@@ -1056,9 +1261,12 @@
 
             row.innerHTML = html`
               <div class="title">
-                ${modeBadge(t)}${t.title
-                  ? escapeHtml(t.title)
-                  : `<span class="when">(${formatTimerLabel(t)})</span>`}
+                <div class="title-main">
+                  ${modeBadge(t)}${t.title
+                    ? escapeHtml(t.title)
+                    : `<span class="when">(${formatTimerLabel(t)})</span>`}
+                </div>
+                ${tagsHtml(t)}
               </div>
               <div class="when-remain">
                 <div
@@ -1113,12 +1321,20 @@
         const trashListEl = $("#trash-list");
         const trashEmptyEl = $("#trash-empty");
         const trashHeaderEl = $("#trash-header");
+        const trashTagFilterEl = $("#trash-tag-filter");
 
         function renderTrash() {
+          renderTagFilterChips(trashTagFilterEl, trash, trashTagFilter);
+
           // sort by soonest to purge first
-          const sorted = [...trash].sort((a, b) => a.deletedAt - b.deletedAt);
+          const sorted = [...trash]
+            .filter((t) => matchesTagFilter(t, trashTagFilter))
+            .sort((a, b) => a.deletedAt - b.deletedAt);
 
           trashEmptyEl.style.display = sorted.length ? "none" : "";
+          trashEmptyEl.textContent = trash.length
+            ? "No trashed timers match the selected tags."
+            : "Trash is empty.";
           trashHeaderEl.style.display = sorted.length ? "" : "none";
           trashListEl.innerHTML = "";
 
@@ -1132,9 +1348,12 @@
 
             row.innerHTML = html`
               <div class="title">
-                ${modeBadge(t)}${t.title
-                  ? escapeHtml(t.title)
-                  : `<span class="when">(${formatTimerLabel(t)})</span>`}
+                <div class="title-main">
+                  ${modeBadge(t)}${t.title
+                    ? escapeHtml(t.title)
+                    : `<span class="when">(${formatTimerLabel(t)})</span>`}
+                </div>
+                ${tagsHtml(t)}
               </div>
               <div class="set">${formatTimerLabel(t)}</div>
               <div class="remain">${humanize(purgesIn)}</div>
@@ -1162,6 +1381,7 @@
             mode: t.mode,
             originalDuration: t.originalDuration,
             targetTime: t.targetTime,
+            tags: t.tags || [],
             deletedAt: alignEndAtToSecond(Date.now()),
           });
         }
@@ -1176,14 +1396,20 @@
         const archiveListEl = $("#archive-list");
         const archiveEmptyEl = $("#archive-empty");
         const archiveHeaderEl = $("#archive-header");
+        const archiveTagFilterEl = $("#archive-tag-filter");
 
         function renderArchived() {
+          renderTagFilterChips(archiveTagFilterEl, archived, archiveTagFilter);
+
           // most recently archived first
-          const sorted = [...archived].sort(
-            (a, b) => b.archivedAt - a.archivedAt,
-          );
+          const sorted = [...archived]
+            .filter((t) => matchesTagFilter(t, archiveTagFilter))
+            .sort((a, b) => b.archivedAt - a.archivedAt);
 
           archiveEmptyEl.style.display = sorted.length ? "none" : "";
+          archiveEmptyEl.textContent = archived.length
+            ? "No archived timers match the selected tags."
+            : "No archived timers.";
           archiveHeaderEl.style.display = sorted.length ? "" : "none";
           archiveListEl.innerHTML = "";
 
@@ -1194,9 +1420,12 @@
 
             row.innerHTML = html`
               <div class="title">
-                ${modeBadge(t)}${t.title
-                  ? escapeHtml(t.title)
-                  : `<span class="when">(${formatTimerLabel(t)})</span>`}
+                <div class="title-main">
+                  ${modeBadge(t)}${t.title
+                    ? escapeHtml(t.title)
+                    : `<span class="when">(${formatTimerLabel(t)})</span>`}
+                </div>
+                ${tagsHtml(t)}
               </div>
               <div class="set">${formatTimerLabel(t)}</div>
               <div class="when">${toTime(t.archivedAt)}</div>
@@ -1233,6 +1462,7 @@
             mode: t.mode,
             originalDuration: t.originalDuration,
             targetTime: t.targetTime,
+            tags: t.tags || [],
             archivedAt: Date.now(),
           });
         }
@@ -1289,7 +1519,7 @@
         $("#timer-form").addEventListener("submit", (e) => {
           e.preventDefault();
 
-          const title = $("#title").value;
+          const { title, tags } = extractTagsFromTitle($("#title").value);
           const mode = $('input[name="mode"]:checked').value;
           const now = Date.now();
 
@@ -1318,6 +1548,7 @@
           timers.push({
             id: seq++,
             title,
+            tags,
             mode,
             endAt,
             createdAt: now,
@@ -1341,6 +1572,13 @@
 
         // Timer controls (pause/resume/restart/delete)
         listEl.addEventListener("click", (e) => {
+          const tagEl = e.target.closest(".tag");
+          if (tagEl) {
+            toggleTagInFilter(timersTagFilter, tagEl.dataset.tag);
+            render();
+            return;
+          }
+
           const btn = e.target.closest("button");
           if (!btn) return;
           const act = btn.getAttribute("data-act");
@@ -1395,6 +1633,13 @@
 
         // Trash controls (restore)
         trashListEl.addEventListener("click", (e) => {
+          const tagEl = e.target.closest(".tag");
+          if (tagEl) {
+            toggleTagInFilter(trashTagFilter, tagEl.dataset.tag);
+            renderTrash();
+            return;
+          }
+
           const btn = e.target.closest("button");
           if (!btn) return;
           const act = btn.getAttribute("data-act");
@@ -1410,6 +1655,7 @@
             timers.push({
               id: seq++,
               title: t.title,
+              tags: t.tags || [],
               mode: t.mode,
               endAt: computeRestartEndAt(t, now),
               createdAt: now,
@@ -1427,6 +1673,13 @@
 
         // Archive controls (restart/delete)
         archiveListEl.addEventListener("click", (e) => {
+          const tagEl = e.target.closest(".tag");
+          if (tagEl) {
+            toggleTagInFilter(archiveTagFilter, tagEl.dataset.tag);
+            renderArchived();
+            return;
+          }
+
           const btn = e.target.closest("button");
           if (!btn) return;
           const act = btn.getAttribute("data-act");
@@ -1442,6 +1695,7 @@
             timers.push({
               id: seq++,
               title: t.title,
+              tags: t.tags || [],
               mode: t.mode,
               endAt: computeRestartEndAt(t, now),
               createdAt: now,
@@ -1460,6 +1714,30 @@
             renderArchived();
             renderTrash();
           }
+        });
+
+        // Tag filter chip bars (select/deselect a tag, or clear the filter)
+        function handleTagFilterClick(e, filterSet, rerender) {
+          const btn = e.target.closest("button");
+          if (!btn) return;
+
+          if (btn.classList.contains("tag-filter-clear")) {
+            filterSet.clear();
+          } else {
+            toggleTagInFilter(filterSet, btn.dataset.tag);
+          }
+
+          rerender();
+        }
+
+        timersTagFilterEl.addEventListener("click", (e) => {
+          handleTagFilterClick(e, timersTagFilter, render);
+        });
+        trashTagFilterEl.addEventListener("click", (e) => {
+          handleTagFilterClick(e, trashTagFilter, renderTrash);
+        });
+        archiveTagFilterEl.addEventListener("click", (e) => {
+          handleTagFilterClick(e, archiveTagFilter, renderArchived);
         });
 
         // Clear all timers
