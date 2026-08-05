@@ -1136,7 +1136,12 @@
         // subset), so deselecting a tag doesn't remove it from the choices.
         function renderTagFilterChips(containerEl, items, filterSet) {
           const tags = computeAvailableTags(items);
-          if (!tags.length) {
+          // Even with no tags left to offer as chips, keep rendering when a
+          // filter is still active so "Clear filter" stays reachable —
+          // otherwise emptying the list (e.g. by deleting the last item
+          // with the filtered tag) strands the filter with no way to reset
+          // it short of a reload.
+          if (!tags.length && !filterSet.size) {
             containerEl.innerHTML = "";
             return;
           }
