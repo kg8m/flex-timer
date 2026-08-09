@@ -375,10 +375,17 @@
       }
 
       /* Same reasoning as .when-remain, applied to the archive list's
-         Set + Archived At column */
+         Set + Archived At column. Set and Archived At aren't equal width:
+         Archived At renders a fixed HH:MM:SS timestamp (same 94px bound as
+         .when-remain), but Set renders formatTimerLabel's "Nd Nh Nm Ns"
+         duration label, which needs more room. 137px = 120.7px measured max
+         content for "9d 23h 59m 59s" (the practical bound — same
+         "big enough" reasoning as Ends At/Remaining's 999:59:59; double-digit
+         day counts still wrap) at this row's 16px font, + 16px breathing
+         room. */
       .set-archived {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 137px 94px;
         gap: 8px;
       }
 
@@ -387,22 +394,22 @@
         opacity: 0.7;
       }
 
-      /* Set (formatTimerLabel — same content as Archive's Set column, so
-         reuses its established 94px) and Purges In (84px = 68px measured
-         max content for "00:04:59"/"00:05:00", the longest values reachable
-         within the 5-minute TRASH_RETENTION_MS, + 16px breathing room) are
-         fixed so Title (the only flexible track) can claim all remaining
-         space — same fix as .timer's Ends At/Remaining/Status columns above. */
+      /* Set (formatTimerLabel — same content and 137px width as Archive's
+         Set column, see .set-archived above) and Purges In (84px = 68px
+         measured max content for "00:04:59"/"00:05:00", the longest values
+         reachable within the 5-minute TRASH_RETENTION_MS, + 16px breathing
+         room) are fixed so Title (the only flexible track) can claim all
+         remaining space — same fix as .timer's Ends At/Remaining/Status
+         columns above. */
       .timer.trash-row {
-        grid-template-columns: 1fr 94px 84px 70px;
+        grid-template-columns: 1fr 137px 84px 70px;
       }
 
-      /* Set + Archived At are fixed to the same 196px (two 94px halves +
-         .set-archived's 8px gap) used by .when-remain, so Title (the only
-         flexible track) can claim all remaining space — same fix as
-         .timer's Ends At/Remaining/Status columns above. */
+      /* Set (137px) + Archived At (94px) + .set-archived's 8px gap = 239px,
+         fixed so Title (the only flexible track) can claim all remaining
+         space — same fix as .timer's Ends At/Remaining/Status columns above. */
       .timer.archive-row {
-        grid-template-columns: 1fr 196px 154px;
+        grid-template-columns: 1fr 239px 154px;
       }
 
       .timer.list-header .controls {
@@ -720,8 +727,11 @@
           font-size: 14px;
         }
 
+        /* Set is 124px = 107.3px measured max content for "9d 23h 59m 59s"
+           (see .set-archived above) at this breakpoint's 14px font, + 16px
+           breathing room. */
         .timer.trash-row {
-          grid-template-columns: 1fr 94px 84px 60px;
+          grid-template-columns: 1fr 124px 84px 60px;
         }
 
         .timer.archive-row {
