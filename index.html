@@ -127,14 +127,15 @@
       .mode-toggle-row {
         display: flex;
         align-items: center;
-        gap: 16px;
         margin-bottom: 12px;
       }
 
+      /* Each radio and its label are siblings, not label-wrapped (a
+         radiogroup's owned elements must have the radio role directly,
+         not nested inside a role-less label), so the 4px/16px spacing
+         that used to come from nested flex gaps is now explicit margins. */
       .mode-toggle-row label {
-        display: flex;
-        align-items: center;
-        gap: 4px;
+        margin-right: 16px;
         font-size: 13px;
         color: var(--muted);
         white-space: nowrap;
@@ -144,7 +145,7 @@
       .mode-toggle-row input[type="radio"] {
         width: 14px;
         height: 14px;
-        margin: 0;
+        margin: 0 4px 0 0;
       }
 
       input,
@@ -679,20 +680,16 @@
             aria-labelledby="mode-label"
           >
             <span class="sr-only" id="mode-label">Mode</span>
-            <label>
-              <input
-                type="radio"
-                name="mode"
-                id="mode-duration"
-                value="duration"
-                checked
-              />
-              Duration
-            </label>
-            <label>
-              <input type="radio" name="mode" id="mode-time" value="time" />
-              At time
-            </label>
+            <input
+              type="radio"
+              name="mode"
+              id="mode-duration"
+              value="duration"
+              checked
+            />
+            <label for="mode-duration">Duration</label>
+            <input type="radio" name="mode" id="mode-time" value="time" />
+            <label for="mode-time">At time</label>
           </div>
 
           <div class="row">
