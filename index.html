@@ -325,8 +325,14 @@
         opacity: 0.7;
       }
 
+      /* Set (formatTimerLabel — same content as Archive's Set column, so
+         reuses its established 94px) and Purges In (84px = 68px measured
+         max content for "00:04:59"/"00:05:00", the longest values reachable
+         within the 5-minute TRASH_RETENTION_MS, + 16px breathing room) are
+         fixed so Title (the only flexible track) can claim all remaining
+         space — same fix as .timer's Ends At/Remaining/Status columns above. */
       .timer.trash-row {
-        grid-template-columns: 1.2fr 0.8fr 1fr 70px;
+        grid-template-columns: 1fr 94px 84px 70px;
       }
 
       /* Set + Archived At are fixed to the same 196px (two 94px halves +
@@ -632,7 +638,7 @@
         }
 
         .timer.trash-row {
-          grid-template-columns: 1.2fr 0.8fr 1fr 60px;
+          grid-template-columns: 1fr 94px 84px 60px;
         }
 
         .timer.archive-row {
