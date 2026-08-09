@@ -287,10 +287,15 @@
         transform: rotate(90deg);
       }
 
-      /* Controls column is wide enough to fit its icon buttons on one line */
+      /* Controls column is wide enough to fit its icon buttons on one line.
+         Ends At/Remaining (196px = two 94px halves + 8px gap; 94px = 78px
+         measured max content for "999:59:59" + 16px breathing room) and
+         Status (72px = 64px measured max content for bold "Running" + 8px
+         breathing room) are fixed so the Title column (the only flexible
+         track) can claim all remaining space. */
       .timer {
         display: grid;
-        grid-template-columns: 1.2fr 2fr 0.8fr 194px;
+        grid-template-columns: 1fr 196px 72px 194px;
         gap: 10px;
         align-items: center;
         border-top: 1px solid var(--border);
