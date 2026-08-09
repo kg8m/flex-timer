@@ -110,13 +110,32 @@
         flex: 1 1 160px;
       }
 
+      /* Always its own full line, regardless of viewport width, so the 7
+         day pills never have to share horizontal space with Title/At time. */
+      #weekday-field {
+        flex: 1 1 100%;
+      }
+
+      /* At narrow widths every .row child already gets its own line, so
+         source order alone reads correctly: Title, At time, Days of week,
+         then Add last. At wide widths Title/At time/Add share one line
+         instead (#weekday-field's 100% basis still forces it to its own
+         line below) — pulling Add ahead of #weekday-field in visual order
+         is what makes that happen without changing the DOM/tab order. */
+      @media (min-width: 641px) {
+        #weekday-field {
+          order: 1;
+        }
+      }
+
       .field {
         display: flex;
         flex-direction: column;
         gap: 6px;
       }
 
-      .field label {
+      .field label,
+      .field #weekday-label {
         font-size: 12px;
         color: var(--muted);
         white-space: nowrap;
@@ -146,6 +165,49 @@
         width: 14px;
         height: 14px;
         margin: 0 4px 0 0;
+      }
+
+      .weekday-toggle-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      /* Native checkboxes, visually hidden but still focusable/keyboard-
+         operable; the sibling label is styled as the toggle pill, matching
+         .tag-filter-chip's active/inactive treatment below. */
+      .weekday-toggle-row input[type="checkbox"] {
+        position: absolute;
+        opacity: 0;
+        width: 1px;
+        height: 1px;
+        margin: 0;
+      }
+
+      .weekday-toggle-row label {
+        height: 26px;
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 0 10px;
+        font-size: 12px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .weekday-toggle-row input[type="checkbox"]:checked + label {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: rgba(34, 197, 94, 0.12);
+      }
+
+      .weekday-toggle-row input[type="checkbox"]:focus-visible + label {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
       }
 
       input,
@@ -497,6 +559,12 @@
         min-width: 0;
       }
 
+      /* Its own line below the title/value inputs, not squeezed onto
+         their line by .edit-row's flex-wrap. */
+      .edit-row .weekday-toggle-row {
+        flex: 1 1 100%;
+      }
+
       /* Unlike the Duration text input, a native time widget can't reflow
          its HH:MM:SS segments — shrinking it below its real content width
          just clips the seconds digits instead of resizing them. 140px is
@@ -768,6 +836,40 @@
               <input id="target-time" name="target-time" type="time" step="1" />
             </div>
 
+            <!-- A .row child so it shares the row's own line-to-line gap
+                 (fixing the label sitting too close to the line above),
+                 and always spans a full line via flex-basis (see CSS) so
+                 the 7 day pills have room to sit on one line. Placed here,
+                 before the Add button, so narrow widths — where every
+                 field gets its own line — read top-to-bottom as fill in
+                 the inputs, then submit; a `order` swap in the wide-only
+                 media query pulls Add back next to Title/At-time there.
+                 display: none is the initial state; updateModeFieldsVisibility()
+                 toggles weekdayFieldEl.style.display based on the selected mode -->
+            <div class="field" id="weekday-field" style="display: none">
+              <span id="weekday-label">Days of week (optional)</span>
+              <div
+                class="weekday-toggle-row"
+                role="group"
+                aria-labelledby="weekday-label"
+              >
+                <input type="checkbox" id="day-1" data-day="1" />
+                <label for="day-1">Mon</label>
+                <input type="checkbox" id="day-2" data-day="2" />
+                <label for="day-2">Tue</label>
+                <input type="checkbox" id="day-3" data-day="3" />
+                <label for="day-3">Wed</label>
+                <input type="checkbox" id="day-4" data-day="4" />
+                <label for="day-4">Thu</label>
+                <input type="checkbox" id="day-5" data-day="5" />
+                <label for="day-5">Fri</label>
+                <input type="checkbox" id="day-6" data-day="6" />
+                <label for="day-6">Sat</label>
+                <input type="checkbox" id="day-0" data-day="0" />
+                <label for="day-0">Sun</label>
+              </div>
+            </div>
+
             <div class="field">
               <label class="sr-only" for="add">Add</label>
               <button id="add" class="primary" type="submit">Add Timer</button>
@@ -863,11 +965,11 @@
     <script>
       (() => {
         /*** State ***/
-        /** @type {{id:number,title:string,tags:string[],endAt:number,createdAt:number,notified:boolean,paused:boolean,pausedAt?:number,remainingAtPause?:number,originalDuration:number}[]} */
+        /** @type {{id:number,title:string,tags:string[],endAt:number,createdAt:number,notified:boolean,paused:boolean,pausedAt?:number,remainingAtPause?:number,originalDuration:number,daysOfWeek?:number[]}[]} */
         let timers = [];
-        /** @type {{id:number,title:string,tags:string[],originalDuration:number,deletedAt:number}[]} */
+        /** @type {{id:number,title:string,tags:string[],originalDuration:number,deletedAt:number,daysOfWeek?:number[]}[]} */
         let trash = [];
-        /** @type {{id:number,title:string,tags:string[],originalDuration:number,archivedAt:number}[]} */
+        /** @type {{id:number,title:string,tags:string[],originalDuration:number,archivedAt:number,daysOfWeek?:number[]}[]} */
         let archived = [];
         let seq = 1;
 
@@ -932,6 +1034,36 @@
             weekday: "short",
           });
 
+        // Short weekday names indexed like Date#getDay() (0=Sunday) — this
+        // indexing is load-bearing (checkbox data-day values and
+        // advanceToAllowedDay's day-of-week matching both key off it) and
+        // must not change even though the UI displays/lists Monday first.
+        const WEEKDAY_LABELS = [
+          "Sun",
+          "Mon",
+          "Tue",
+          "Wed",
+          "Thu",
+          "Fri",
+          "Sat",
+        ];
+
+        // Display order for the weekday toggle buttons and daysOfWeekLabel:
+        // Monday first, Sunday last (still Date#getDay() values under the
+        // hood, just reordered for presentation).
+        const WEEKDAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+        // Comma-joined weekday names (Monday-first) for a "time" mode
+        // timer's daysOfWeek restriction, or "" when unrestricted (fires
+        // every day).
+        function daysOfWeekLabel(daysOfWeek) {
+          if (!daysOfWeek || !daysOfWeek.length) return "";
+          const order = new Set(daysOfWeek);
+          return WEEKDAY_DISPLAY_ORDER.filter((d) => order.has(d))
+            .map((d) => WEEKDAY_LABELS[d])
+            .join(", ");
+        }
+
         function parseDuration(input) {
           const s = String(input || "").trim();
           if (!s) return 0;
@@ -992,10 +1124,34 @@
           return [t.title, tagTokens].filter(Boolean).join(" ");
         }
 
+        // Push `target` forward in 24h steps until it lands on a day-of-week
+        // present in `daysOfWeek` (0=Sunday..6=Saturday, matching
+        // Date#getDay()). A no-op when daysOfWeek is empty/undefined, which
+        // means "every day". Bounded to 7 iterations since some day within
+        // a week is always allowed whenever daysOfWeek is non-empty.
+        function advanceToAllowedDay(target, daysOfWeek) {
+          if (!daysOfWeek || !daysOfWeek.length) return target;
+
+          for (
+            let i = 0;
+            i < 7 && !daysOfWeek.includes(new Date(target).getDay());
+            i++
+          ) {
+            target += 24 * 60 * 60 * 1000;
+          }
+
+          return target;
+        }
+
         // Resolve "HH:MM" or "HH:MM:SS" to the next occurrence of that time
-        // (today if it hasn't passed yet, otherwise tomorrow). Seconds are
-        // optional and default to 0.
-        function computeNextTimeBasedEndAt(timeStr, now = Date.now()) {
+        // (today if it hasn't passed yet, otherwise tomorrow), further
+        // restricted to daysOfWeek if given. Seconds are optional and
+        // default to 0.
+        function computeNextTimeBasedEndAt(
+          timeStr,
+          now = Date.now(),
+          daysOfWeek,
+        ) {
           const m = String(timeStr || "").match(
             /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/,
           );
@@ -1010,7 +1166,7 @@
           let target = d.getTime();
           if (target <= now) target += 24 * 60 * 60 * 1000;
 
-          return target;
+          return advanceToAllowedDay(target, daysOfWeek);
         }
 
         // Snap a duration-based endAt to the second grid so its countdown
@@ -1023,7 +1179,7 @@
         // Resolve the end time for (re)starting a timer, branching on its mode.
         function computeRestartEndAt(t, now = Date.now()) {
           if (t.mode === "time") {
-            return computeNextTimeBasedEndAt(t.targetTime, now);
+            return computeNextTimeBasedEndAt(t.targetTime, now, t.daysOfWeek);
           }
 
           return alignEndAtToSecond(now + t.originalDuration);
@@ -1067,9 +1223,12 @@
           return h > 0 ? `${h}:${fmt2(m)}:${fmt2(s)}` : `${m}:${fmt2(s)}`;
         }
 
-        // Fallback label for an untitled timer: the target time for "time"
-        // mode, or the configured duration for "duration" mode. Trailing
-        // ":00" seconds are hidden since they're the common (omitted) case.
+        // The target time for "time" mode, or the configured duration for
+        // "duration" mode — the plain configured value, with no
+        // day-of-week restriction attached. Trailing ":00" seconds are
+        // hidden since they're the common (omitted) case. Used for the
+        // "Set" column in Archive/Trash, which has no room to spare for a
+        // day list on top of it.
         function formatTimerLabel(t) {
           if (t.mode !== "time") return formatDurationLabel(t.originalDuration);
 
@@ -1078,6 +1237,16 @@
             "$1",
           );
           return escapeHtml(targetTime);
+        }
+
+        // Fallback title for an untitled timer: formatTimerLabel(t), with a
+        // day-of-week restriction prefixed (e.g. "Mon 10:00") since this is
+        // the one place that restriction is visible without hovering the
+        // mode badge's tooltip.
+        function formatFallbackTitle(t) {
+          const label = formatTimerLabel(t);
+          const days = t.mode === "time" ? daysOfWeekLabel(t.daysOfWeek) : "";
+          return days ? `${days} ${label}` : label;
         }
 
         // Shared line-icon set (stroke-based, 24x24 viewBox) used by the
@@ -1203,8 +1372,9 @@
         // fallback label.
         function modeBadge(t) {
           const isTime = t.mode === "time";
+          const days = isTime ? daysOfWeekLabel(t.daysOfWeek) : "";
           const label = isTime
-            ? "At time"
+            ? `At time${days ? ` — ${days}` : ""}`
             : `Duration: ${formatDurationLabel(t.originalDuration)}`;
 
           return html`
@@ -1370,7 +1540,7 @@
 
         // Inline edit form shown in place of a row's normal content. Shared
         // by the Timers and Archived lists: both item shapes carry the same
-        // title/tags/mode/originalDuration/targetTime fields.
+        // title/tags/mode/originalDuration/targetTime/daysOfWeek fields.
         function editRowHtml(t) {
           const draft = editDraft || {
             title: composeTitleWithTags(t),
@@ -1378,6 +1548,7 @@
               t.mode === "time"
                 ? t.targetTime
                 : durationToEditableString(t.originalDuration),
+            daysOfWeek: t.daysOfWeek,
           };
 
           const valueField =
@@ -1401,6 +1572,34 @@
                     value="${escapeHtml(draft.value || "")}"
                   />
                 `;
+
+          // On its own second line (after title/value/controls) so the
+          // first line stays identical in shape to the Duration mode edit
+          // row instead of pushing Save/Cancel down to a third line.
+          const weekdayField =
+            t.mode === "time"
+              ? html`
+                  <div
+                    class="weekday-toggle-row"
+                    role="group"
+                    aria-label="Days of week (optional; none = every day)"
+                  >
+                    ${WEEKDAY_DISPLAY_ORDER.map(
+                      (day) => html`
+                        <input
+                          type="checkbox"
+                          id="edit-day-${t.id}-${day}"
+                          data-day="${day}"
+                          ${draft.daysOfWeek?.includes(day) ? "checked" : ""}
+                        />
+                        <label for="edit-day-${t.id}-${day}">
+                          ${WEEKDAY_LABELS[day]}
+                        </label>
+                      `,
+                    ).join("")}
+                  </div>
+                `
+              : "";
 
           return html`
             <div class="edit-row">
@@ -1432,6 +1631,7 @@
                   ${icon("x")}
                 </button>
               </div>
+              ${weekdayField}
             </div>
           `;
         }
@@ -1450,7 +1650,12 @@
 
           if (t.mode === "time") {
             const targetTime = valueInput.value;
-            const endAt = computeNextTimeBasedEndAt(targetTime, now);
+            const daysOfWeek = readDaysOfWeek(row);
+            const endAt = computeNextTimeBasedEndAt(
+              targetTime,
+              now,
+              daysOfWeek,
+            );
 
             if (!targetTime || endAt == null) {
               alert("Enter a valid time (HH:MM or HH:MM:SS).");
@@ -1458,6 +1663,7 @@
             }
 
             t.targetTime = targetTime;
+            t.daysOfWeek = daysOfWeek;
             if ("endAt" in t) {
               t.endAt = endAt;
               t.notified = false;
@@ -1536,7 +1742,16 @@
         // full render() triggered by unrelated state doesn't wipe them.
         function handleEditInput(e) {
           if (editingId == null) return;
-          if (!e.target.matches(".edit-title, .edit-value")) return;
+
+          const isWeekdayCheckbox = e.target.matches(
+            '.weekday-toggle-row input[type="checkbox"]',
+          );
+          if (
+            !isWeekdayCheckbox &&
+            !e.target.matches(".edit-title, .edit-value")
+          ) {
+            return;
+          }
 
           const row = e.target.closest(".timer");
           if (!row || Number(row.dataset.id) !== editingId) return;
@@ -1553,11 +1768,14 @@
                 t.mode === "time"
                   ? t.targetTime
                   : durationToEditableString(t.originalDuration),
+              daysOfWeek: t.daysOfWeek,
             };
           }
 
           if (e.target.classList.contains("edit-title")) {
             editDraft.title = e.target.value;
+          } else if (isWeekdayCheckbox) {
+            editDraft.daysOfWeek = readDaysOfWeek(row);
           } else {
             editDraft.value = e.target.value;
           }
@@ -1670,7 +1888,7 @@
                 <div class="title-main">
                   ${modeBadge(t)}${t.title
                     ? escapeHtml(t.title)
-                    : `<span class="when">(${formatTimerLabel(t)})</span>`}
+                    : `<span class="when">(${formatFallbackTitle(t)})</span>`}
                 </div>
                 ${tagsHtml(t)}
               </div>
@@ -1799,7 +2017,7 @@
                 <div class="title-main">
                   ${modeBadge(t)}${t.title
                     ? escapeHtml(t.title)
-                    : `<span class="when">(${formatTimerLabel(t)})</span>`}
+                    : `<span class="when">(${formatFallbackTitle(t)})</span>`}
                 </div>
                 ${tagsHtml(t)}
               </div>
@@ -1829,6 +2047,7 @@
             mode: t.mode,
             originalDuration: t.originalDuration,
             targetTime: t.targetTime,
+            daysOfWeek: t.daysOfWeek,
             tags: t.tags || [],
             deletedAt: alignEndAtToSecond(Date.now()),
           });
@@ -1879,7 +2098,7 @@
                 <div class="title-main">
                   ${modeBadge(t)}${t.title
                     ? escapeHtml(t.title)
-                    : `<span class="when">(${formatTimerLabel(t)})</span>`}
+                    : `<span class="when">(${formatFallbackTitle(t)})</span>`}
                 </div>
                 ${tagsHtml(t)}
               </div>
@@ -1929,6 +2148,7 @@
             mode: t.mode,
             originalDuration: t.originalDuration,
             targetTime: t.targetTime,
+            daysOfWeek: t.daysOfWeek,
             tags: t.tags || [],
             archivedAt: Date.now(),
           });
@@ -1951,13 +2171,43 @@
         // Toggle Duration/At-time input fields based on the selected mode
         const durationFieldEl = $("#duration-field");
         const timeFieldEl = $("#time-field");
+        const weekdayFieldEl = $("#weekday-field");
         const durationInputEl = $("#duration");
         const targetTimeInputEl = $("#target-time");
+
+        // Read the checked days from a .weekday-toggle-row's checkboxes
+        // within `container`, returning undefined (meaning "every day")
+        // when none *or all* are checked — selecting every day is the same
+        // restriction as selecting none, so it's normalized the same way
+        // rather than showing as a (redundant) 7-day restriction elsewhere.
+        // Shared by the add-timer form and the inline edit row, both of
+        // which render one .weekday-toggle-row.
+        function readDaysOfWeek(container) {
+          const days = [
+            ...container.querySelectorAll(
+              '.weekday-toggle-row input[type="checkbox"]:checked',
+            ),
+          ].map((cb) => Number(cb.dataset.day));
+          return days.length && days.length < 7 ? days : undefined;
+        }
+
+        // Set a .weekday-toggle-row's checkboxes within `container` to
+        // reflect `daysOfWeek` (undefined/empty checks none, meaning
+        // "every day").
+        function setDaysOfWeekCheckboxes(container, daysOfWeek) {
+          const set = new Set(daysOfWeek || []);
+          container
+            .querySelectorAll('.weekday-toggle-row input[type="checkbox"]')
+            .forEach((cb) => {
+              cb.checked = set.has(Number(cb.dataset.day));
+            });
+        }
 
         function updateModeFieldsVisibility() {
           const isTime = $('input[name="mode"]:checked').value === "time";
           durationFieldEl.style.display = isTime ? "none" : "";
           timeFieldEl.style.display = isTime ? "" : "none";
+          weekdayFieldEl.style.display = isTime ? "" : "none";
           durationInputEl.required = !isTime;
           targetTimeInputEl.required = isTime;
           $("#title").focus();
@@ -1990,11 +2240,12 @@
           const mode = $('input[name="mode"]:checked').value;
           const now = Date.now();
 
-          let endAt, originalDuration, targetTime;
+          let endAt, originalDuration, targetTime, daysOfWeek;
 
           if (mode === "time") {
             targetTime = targetTimeInputEl.value;
-            endAt = computeNextTimeBasedEndAt(targetTime, now);
+            daysOfWeek = readDaysOfWeek($("#timer-form"));
+            endAt = computeNextTimeBasedEndAt(targetTime, now, daysOfWeek);
 
             if (!targetTime || endAt == null) {
               alert("Enter a valid time (HH:MM or HH:MM:SS).");
@@ -2023,11 +2274,13 @@
             paused: false,
             originalDuration,
             targetTime,
+            daysOfWeek,
           });
 
           $("#title").value = "";
           $("#duration").value = "";
           targetTimeInputEl.value = "";
+          setDaysOfWeekCheckboxes($("#timer-form"), undefined);
           $("#mode-duration").checked = true;
           updateModeFieldsVisibility();
 
@@ -2092,7 +2345,10 @@
             saveToStorage();
             render();
           } else if (act === "skip" && t && t.mode === "time") {
-            t.endAt += 24 * 60 * 60 * 1000;
+            t.endAt = advanceToAllowedDay(
+              t.endAt + 24 * 60 * 60 * 1000,
+              t.daysOfWeek,
+            );
             saveToStorage();
             render();
           } else if (act === "edit" && t) {
@@ -2165,6 +2421,7 @@
               paused: false,
               originalDuration: t.originalDuration,
               targetTime: t.targetTime,
+              daysOfWeek: t.daysOfWeek,
             });
 
             saveToStorage();
@@ -2205,6 +2462,7 @@
               paused: false,
               originalDuration: t.originalDuration,
               targetTime: t.targetTime,
+              daysOfWeek: t.daysOfWeek,
             });
             saveToStorage();
             render();
