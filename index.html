@@ -312,6 +312,14 @@
         gap: 8px;
       }
 
+      /* Same reasoning as .when-remain, applied to the archive list's
+         Set + Archived At column */
+      .set-archived {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
       .timer.list-header {
         border-top: none;
         opacity: 0.7;
@@ -321,8 +329,12 @@
         grid-template-columns: 1.2fr 0.8fr 1fr 70px;
       }
 
+      /* Set + Archived At are fixed to the same 196px (two 94px halves +
+         .set-archived's 8px gap) used by .when-remain, so Title (the only
+         flexible track) can claim all remaining space — same fix as
+         .timer's Ends At/Remaining/Status columns above. */
       .timer.archive-row {
-        grid-template-columns: 1.2fr 0.8fr 1fr 154px;
+        grid-template-columns: 1fr 196px 154px;
       }
 
       .timer.list-header .controls {
@@ -624,11 +636,19 @@
         }
 
         .timer.archive-row {
-          grid-template-columns: 1.2fr 0.8fr 1fr 130px;
+          grid-template-columns: 1.6fr 1fr 130px;
         }
 
         /* Stack Ends At above Remaining to save horizontal space */
         .when-remain {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 2px;
+        }
+
+        /* Stack Set above Archived At to save horizontal space */
+        .set-archived {
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -795,8 +815,10 @@
           style="display: none"
         >
           <div class="title">Title</div>
-          <div class="set">Set</div>
-          <div class="when">Archived At</div>
+          <div class="set-archived">
+            <div class="set">Set</div>
+            <div class="when">Archived At</div>
+          </div>
           <div class="controls">Actions</div>
         </div>
         <div id="archive-list">
@@ -1855,8 +1877,10 @@
                 </div>
                 ${tagsHtml(t)}
               </div>
-              <div class="set">${formatTimerLabel(t)}</div>
-              <div class="when">${toTime(t.archivedAt)}</div>
+              <div class="set-archived">
+                <div class="set">${formatTimerLabel(t)}</div>
+                <div class="when">${toTime(t.archivedAt)}</div>
+              </div>
               <div class="controls">
                 <button
                   class="accent"
