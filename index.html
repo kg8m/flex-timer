@@ -204,7 +204,9 @@
         color: var(--muted);
       }
 
-      /* Icon-only action buttons (Pause/Resume/Restart/Archive/Delete/Restore) */
+      /* Icon-only action buttons (Pause/Resume/Restart/Archive/Delete/Restore),
+         also matches the row-menu toggle (see .row-menu below), a <button>
+         nested inside .controls. */
       .controls button {
         box-sizing: border-box;
         padding: 8px;
@@ -283,7 +285,7 @@
       /* Controls column is wide enough to fit its icon buttons on one line */
       .timer {
         display: grid;
-        grid-template-columns: 1.2fr 2fr 0.8fr 150px;
+        grid-template-columns: 1.2fr 2fr 0.8fr 194px;
         gap: 10px;
         align-items: center;
         border-top: 1px solid var(--border);
@@ -310,7 +312,7 @@
       }
 
       .timer.archive-row {
-        grid-template-columns: 1.2fr 0.8fr 1fr 110px;
+        grid-template-columns: 1.2fr 0.8fr 1fr 154px;
       }
 
       .timer.list-header .controls {
@@ -399,6 +401,82 @@
         justify-content: flex-end;
         flex-wrap: wrap;
         text-align: right;
+      }
+
+      /* "More actions" dropdown, shown only at narrow widths (see the
+         media query below) to group less-frequently-used row actions
+         (currently Edit/Archive) behind a single toggle, so the Controls
+         column doesn't need extra width per action added. At normal
+         widths the toggle+popover stay hidden entirely and the row's own
+         plain, always-visible Edit/Archive buttons (marked with
+         .wide-action) are what's shown instead — the two groups are
+         separate DOM nodes, never the same buttons reparented via CSS. */
+      .row-menu {
+        display: none;
+        position: relative;
+      }
+
+      /* Floats over the row instead of pushing Delete/other columns
+         around when opened — opening the menu must not reflow the row.
+         Centered under the toggle (rather than right: 0, which aligns the
+         padded box edge, not the icon column inside it) so the stacked
+         Edit/Archive icons form one visual column with the toggle's own
+         icon regardless of this popover's padding. */
+      .row-menu-popover {
+        display: none;
+        flex-direction: column;
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        margin-top: 4px;
+        z-index: 5;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 6px;
+        gap: 6px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      }
+
+      .row-menu.open .row-menu-popover {
+        display: flex;
+      }
+
+      /* Make the open state obvious at a glance, matching the neutral
+         (non-accent) hover tint already used for .tag-filter-chip. */
+      .row-menu.open > button {
+        background: rgba(156, 163, 175, 0.12);
+      }
+
+      /* Inline edit form that replaces a row's normal content, spanning all
+         of that row's grid columns regardless of how many it has. */
+      .edit-row {
+        grid-column: 1 / -1;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .edit-row .edit-title {
+        flex: 2 1 200px;
+        min-width: 0;
+      }
+
+      .edit-row .edit-value {
+        flex: 1 1 120px;
+        min-width: 0;
+      }
+
+      /* Unlike the Duration text input, a native time widget can't reflow
+         its HH:MM:SS segments — shrinking it below its real content width
+         just clips the seconds digits instead of resizing them. 140px is
+         the measured minimum where Chromium renders "15:30:45" plus its
+         clock-icon affordance in full, inside this input's own 12px
+         horizontal padding. */
+      .edit-row input[type="time"] {
+        min-width: 140px;
       }
 
       /* Styled like a trailing `.timer` row (border-top + same vertical
@@ -536,7 +614,7 @@
         }
 
         .timer.archive-row {
-          grid-template-columns: 1.2fr 0.8fr 1fr 90px;
+          grid-template-columns: 1.2fr 0.8fr 1fr 130px;
         }
 
         /* Stack Ends At above Remaining to save horizontal space */
@@ -552,6 +630,14 @@
           gap: 4px;
         }
 
+        .controls .wide-action {
+          display: none;
+        }
+
+        .row-menu {
+          display: inline-flex;
+        }
+
         /* Rows: colored dot instead of the text label (Actions icons stay untouched) */
         .status-icon {
           display: inline;
@@ -559,6 +645,14 @@
 
         .status-text {
           display: none;
+        }
+
+        .edit-row .edit-title {
+          flex-basis: 80px;
+        }
+
+        .edit-row .edit-value {
+          flex-basis: 60px;
         }
       }
     </style>
@@ -844,6 +938,14 @@
           return { title, tags: [...new Set(tags)] };
         }
 
+        // Inverse of extractTagsFromTitle: reassemble the raw text a user
+        // would type (title + trailing #tag tokens) so an edit form can be
+        // seeded with something that round-trips back through it unchanged.
+        function composeTitleWithTags(t) {
+          const tagTokens = (t.tags || []).map((tag) => `#${tag}`).join(" ");
+          return [t.title, tagTokens].filter(Boolean).join(" ");
+        }
+
         // Resolve "HH:MM" or "HH:MM:SS" to the next occurrence of that time
         // (today if it hasn't passed yet, otherwise tomorrow). Seconds are
         // optional and default to 0.
@@ -907,6 +1009,18 @@
           return parts.join(" ");
         }
 
+        // Render a duration back into an editable "H:MM:SS" / "MM:SS" string
+        // (rather than formatDurationLabel's "1h 5m" form) so it round-trips
+        // exactly through parseDuration when an edit is saved unchanged.
+        function durationToEditableString(ms) {
+          const totalSec = Math.round(Math.max(0, ms) / 1000);
+          const h = Math.floor(totalSec / 3600);
+          const m = Math.floor((totalSec % 3600) / 60);
+          const s = totalSec % 60;
+
+          return h > 0 ? `${h}:${fmt2(m)}:${fmt2(s)}` : `${m}:${fmt2(s)}`;
+        }
+
         // Fallback label for an untitled timer: the target time for "time"
         // mode, or the configured duration for "duration" mode. Trailing
         // ":00" seconds are hidden since they're the common (omitted) case.
@@ -960,6 +1074,17 @@
             <polyline points="9 14 4 9 9 4"></polyline>
             <path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>
           `,
+          edit: html`
+            <path d="M12 20h9"></path>
+            <path
+              d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
+            ></path>
+          `,
+          check: html`<polyline points="20 6 9 17 4 12"></polyline>`,
+          x: html`
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          `,
           clock: html`
             <circle cx="12" cy="12" r="10"></circle>
             <polyline points="12 6 12 12 16 14"></polyline>
@@ -981,6 +1106,23 @@
                 fill="currentColor"
               >
                 <circle cx="12" cy="12" r="10"></circle>
+              </svg>
+            `;
+          }
+
+          // "More actions" row-menu toggle: three filled dots read better
+          // than the stroked-outline treatment used for the other icons.
+          if (name === "more-vertical") {
+            return html`
+              <svg
+                viewBox="0 0 24 24"
+                width="${size}"
+                height="${size}"
+                fill="currentColor"
+              >
+                <circle cx="12" cy="5" r="1.5"></circle>
+                <circle cx="12" cy="12" r="1.5"></circle>
+                <circle cx="12" cy="19" r="1.5"></circle>
               </svg>
             `;
           }
@@ -1109,6 +1251,16 @@
         let archiveTagFilter = new Set();
         let trashTagFilter = new Set();
 
+        // Inline-edit state, shared across the Timers and Archived lists
+        // (ids are globally unique, so one pair of variables is enough).
+        // editingId is the id of the row currently showing the edit form;
+        // editDraft holds its in-progress (unsaved) input values so they
+        // survive a full render() triggered by unrelated state changes
+        // (e.g. another timer finishing) instead of resetting to the
+        // original values on every keystroke-unrelated re-render.
+        let editingId = null;
+        let editDraft = null;
+
         function computeAvailableTags(items) {
           const set = new Set();
           for (const t of items) {
@@ -1170,6 +1322,201 @@
           `;
         }
 
+        // Inline edit form shown in place of a row's normal content. Shared
+        // by the Timers and Archived lists: both item shapes carry the same
+        // title/tags/mode/originalDuration/targetTime fields.
+        function editRowHtml(t) {
+          const draft = editDraft || {
+            title: composeTitleWithTags(t),
+            value:
+              t.mode === "time"
+                ? t.targetTime
+                : durationToEditableString(t.originalDuration),
+          };
+
+          const valueField =
+            t.mode === "time"
+              ? html`
+                  <input
+                    type="time"
+                    step="1"
+                    class="edit-value"
+                    aria-label="At time"
+                    value="${escapeHtml(draft.value || "")}"
+                  />
+                `
+              : html`
+                  <input
+                    type="text"
+                    inputmode="numeric"
+                    class="edit-value"
+                    aria-label="Duration"
+                    placeholder="5:00 / 5 / 1h / 30s / 2d"
+                    value="${escapeHtml(draft.value || "")}"
+                  />
+                `;
+
+          return html`
+            <div class="edit-row">
+              <input
+                type="text"
+                class="edit-title"
+                aria-label="Title"
+                placeholder="e.g., Tea #break / Meeting #work"
+                value="${escapeHtml(draft.title || "")}"
+              />
+              ${valueField}
+              <div class="controls">
+                <button
+                  class="accent"
+                  data-act="save-edit"
+                  data-tooltip="Save"
+                  aria-label="Save"
+                  type="button"
+                >
+                  ${icon("check")}
+                </button>
+                <button
+                  class="neutral"
+                  data-act="cancel-edit"
+                  data-tooltip="Cancel"
+                  aria-label="Cancel"
+                  type="button"
+                >
+                  ${icon("x")}
+                </button>
+              </div>
+            </div>
+          `;
+        }
+
+        // Apply an edit form's current input values to `t` (a timer or
+        // archived item — both share the same fields). Returns false
+        // (leaving the edit form open) if the value field failed to parse.
+        // Archived items have no endAt/paused/notified, so those updates
+        // are skipped via the `"endAt" in t` guard, letting active timers
+        // and archived items share this one function.
+        function saveEdit(row, t) {
+          const titleInput = $(".edit-title", row);
+          const valueInput = $(".edit-value", row);
+          const { title, tags } = extractTagsFromTitle(titleInput.value);
+          const now = Date.now();
+
+          if (t.mode === "time") {
+            const targetTime = valueInput.value;
+            const endAt = computeNextTimeBasedEndAt(targetTime, now);
+
+            if (!targetTime || endAt == null) {
+              alert("Enter a valid time (HH:MM or HH:MM:SS).");
+              return false;
+            }
+
+            t.targetTime = targetTime;
+            if ("endAt" in t) {
+              t.endAt = endAt;
+              t.notified = false;
+            }
+          } else {
+            const dur = parseDuration(valueInput.value);
+
+            if (!dur || dur <= 0) {
+              alert("Enter duration as mm:ss or minutes (number).");
+              return false;
+            }
+
+            // Preserve elapsed time: shift endAt/remainingAtPause by exactly
+            // the change in total duration, rather than restarting the
+            // countdown from now.
+            const delta = dur - t.originalDuration;
+            t.originalDuration = dur;
+            if ("endAt" in t) {
+              if (t.paused) {
+                t.remainingAtPause = clamp0((t.remainingAtPause || 0) + delta);
+              } else {
+                t.endAt += delta;
+              }
+              t.notified = false;
+            }
+          }
+
+          t.title = title;
+          t.tags = tags;
+
+          editingId = null;
+          editDraft = null;
+          return true;
+        }
+
+        function focusEditTitle(containerEl) {
+          const input = $(".editing .edit-title", containerEl);
+          if (input) {
+            input.focus();
+            input.select();
+          }
+        }
+
+        // Shared Enter-to-save / Escape-to-cancel handling for both lists'
+        // edit forms. renderFn is whichever of render()/renderArchived()
+        // owns the row the event originated in.
+        function handleEditKeydown(renderFn) {
+          return (e) => {
+            if (!e.target.matches(".edit-title, .edit-value")) return;
+
+            if (e.key === "Escape") {
+              editingId = null;
+              editDraft = null;
+              renderFn();
+            } else if (e.key === "Enter") {
+              // Ignore the Enter that confirms an IME composition (e.g.
+              // finalizing Japanese kanji conversion) — it must not also
+              // submit the edit.
+              if (e.isComposing) return;
+
+              const row = e.target.closest(".timer");
+              const id = Number(row?.dataset.id);
+              const t =
+                timers.find((x) => x.id === id) ||
+                archived.find((x) => x.id === id);
+
+              if (t && saveEdit(row, t)) {
+                saveToStorage();
+                renderFn();
+              }
+            }
+          };
+        }
+
+        // Keep editDraft in sync with in-progress (unsaved) edits so a
+        // full render() triggered by unrelated state doesn't wipe them.
+        function handleEditInput(e) {
+          if (editingId == null) return;
+          if (!e.target.matches(".edit-title, .edit-value")) return;
+
+          const row = e.target.closest(".timer");
+          if (!row || Number(row.dataset.id) !== editingId) return;
+
+          const t =
+            timers.find((x) => x.id === editingId) ||
+            archived.find((x) => x.id === editingId);
+          if (!t) return;
+
+          if (!editDraft) {
+            editDraft = {
+              title: composeTitleWithTags(t),
+              value:
+                t.mode === "time"
+                  ? t.targetTime
+                  : durationToEditableString(t.originalDuration),
+            };
+          }
+
+          if (e.target.classList.contains("edit-title")) {
+            editDraft.title = e.target.value;
+          } else {
+            editDraft.value = e.target.value;
+          }
+        }
+
         const timersTagFilterEl = $("#timers-tag-filter");
 
         function render() {
@@ -1187,8 +1534,16 @@
 
           for (const t of sorted) {
             const row = document.createElement("div");
-            row.className = "timer";
             row.dataset.id = String(t.id);
+
+            if (t.id === editingId) {
+              row.className = "timer editing";
+              row.innerHTML = editRowHtml(t);
+              listEl.appendChild(row);
+              continue;
+            }
+
+            row.className = "timer";
 
             const now = Date.now();
             let remaining;
@@ -1299,7 +1654,16 @@
               <div class="controls">
                 ${pauseResumeBtn} ${skipBtn}
                 <button
-                  class="neutral"
+                  class="neutral wide-action"
+                  data-act="edit"
+                  data-tooltip="Edit"
+                  aria-label="Edit"
+                  type="button"
+                >
+                  ${icon("edit")}
+                </button>
+                <button
+                  class="neutral wide-action"
                   data-act="archive"
                   data-tooltip="Archive"
                   aria-label="Archive"
@@ -1316,6 +1680,39 @@
                 >
                   ${icon("trash")}
                 </button>
+                <div class="row-menu">
+                  <button
+                    class="neutral"
+                    data-act="toggle-menu"
+                    data-tooltip="More actions"
+                    aria-label="More actions"
+                    aria-haspopup="true"
+                    aria-expanded="false"
+                    type="button"
+                  >
+                    ${icon("more-vertical")}
+                  </button>
+                  <div class="row-menu-popover">
+                    <button
+                      class="neutral"
+                      data-act="edit"
+                      data-tooltip="Edit"
+                      aria-label="Edit"
+                      type="button"
+                    >
+                      ${icon("edit")}
+                    </button>
+                    <button
+                      class="neutral"
+                      data-act="archive"
+                      data-tooltip="Archive"
+                      aria-label="Archive"
+                      type="button"
+                    >
+                      ${icon("archive")}
+                    </button>
+                  </div>
+                </div>
               </div>
             `;
 
@@ -1420,8 +1817,16 @@
 
           for (const t of sorted) {
             const row = document.createElement("div");
-            row.className = "timer archive-row";
             row.dataset.id = String(t.id);
+
+            if (t.id === editingId) {
+              row.className = "timer archive-row editing";
+              row.innerHTML = editRowHtml(t);
+              archiveListEl.appendChild(row);
+              continue;
+            }
+
+            row.className = "timer archive-row";
 
             row.innerHTML = html`
               <div class="title">
@@ -1443,6 +1848,15 @@
                   type="button"
                 >
                   ${icon("refresh-cw")}
+                </button>
+                <button
+                  class="neutral"
+                  data-act="edit"
+                  data-tooltip="Edit"
+                  aria-label="Edit"
+                  type="button"
+                >
+                  ${icon("edit")}
                 </button>
                 <button
                   class="danger"
@@ -1633,7 +2047,42 @@
             t.endAt += 24 * 60 * 60 * 1000;
             saveToStorage();
             render();
+          } else if (act === "edit" && t) {
+            editingId = id;
+            editDraft = null;
+            render();
+            focusEditTitle(listEl);
+          } else if (act === "cancel-edit") {
+            editingId = null;
+            editDraft = null;
+            render();
+          } else if (act === "save-edit" && t) {
+            if (saveEdit(row, t)) {
+              saveToStorage();
+              render();
+            }
+          } else if (act === "toggle-menu") {
+            const menu = btn.closest(".row-menu");
+            const isOpen = menu?.classList.toggle("open");
+            btn.setAttribute("aria-expanded", String(!!isOpen));
           }
+        });
+
+        listEl.addEventListener("input", handleEditInput);
+        listEl.addEventListener("keydown", handleEditKeydown(render));
+
+        // Close any open row-menu popover (see .row-menu in the CSS) when
+        // clicking outside of it, matching normal dropdown behavior.
+        document.addEventListener("click", (e) => {
+          document.querySelectorAll(".row-menu.open").forEach((menu) => {
+            if (!menu.contains(e.target)) {
+              menu.classList.remove("open");
+              $('[data-act="toggle-menu"]', menu)?.setAttribute(
+                "aria-expanded",
+                "false",
+              );
+            }
+          });
         });
 
         // Trash controls (restore)
@@ -1718,8 +2167,28 @@
             saveToStorage();
             renderArchived();
             renderTrash();
+          } else if (act === "edit") {
+            editingId = id;
+            editDraft = null;
+            renderArchived();
+            focusEditTitle(archiveListEl);
+          } else if (act === "cancel-edit") {
+            editingId = null;
+            editDraft = null;
+            renderArchived();
+          } else if (act === "save-edit") {
+            if (saveEdit(row, t)) {
+              saveToStorage();
+              renderArchived();
+            }
           }
         });
+
+        archiveListEl.addEventListener("input", handleEditInput);
+        archiveListEl.addEventListener(
+          "keydown",
+          handleEditKeydown(renderArchived),
+        );
 
         // Tag filter chip bars (select/deselect a tag, or clear the filter)
         function handleTagFilterClick(e, filterSet, rerender) {
@@ -1830,6 +2299,8 @@
           // lightweight in-place update
           const rows = [...listEl.children];
           rows.forEach((row) => {
+            if (row.classList.contains("editing")) return;
+
             const id = Number(row.dataset.id);
             const t = timers.find((x) => x.id === id);
             if (!t) return;
