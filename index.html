@@ -257,9 +257,13 @@
         margin-left: auto;
       }
 
-      .list-summary h2 {
+      /* role="heading" span instead of an actual h2: <summary>'s content
+         model only permits phrasing content, or a single heading element
+         with nothing else alongside it — not a heading plus this .help
+         text, so the heading semantics are applied via ARIA instead. */
+      .list-summary .list-title {
         font-size: 16px;
-        margin: 0;
+        font-weight: bold;
       }
 
       .list-summary::-webkit-details-marker {
@@ -746,7 +750,7 @@
 
       <details class="card list" id="timers-card" open>
         <summary class="list-summary">
-          <h2>Timers</h2>
+          <span class="list-title" role="heading" aria-level="2">Timers</span>
           <span class="help">Timers will beep when finished.</span>
         </summary>
         <div class="tag-filter" id="timers-tag-filter">
@@ -773,7 +777,7 @@
 
       <details class="card list" id="archive-card" open>
         <summary class="list-summary">
-          <h2>Archived</h2>
+          <span class="list-title" role="heading" aria-level="2">Archived</span>
           <span class="help">Kept until you restart or delete them.</span>
         </summary>
         <div class="tag-filter" id="archive-tag-filter">
@@ -800,7 +804,7 @@
 
       <details class="card list" id="trash-card" open>
         <summary class="list-summary">
-          <h2>Trash</h2>
+          <span class="list-title" role="heading" aria-level="2">Trash</span>
           <span class="help">Restorable for 5 minutes after deletion.</span>
         </summary>
         <div class="tag-filter" id="trash-tag-filter">
