@@ -1536,6 +1536,12 @@
         let archiveTagFilterExpanded = false;
         let trashTagFilterExpanded = false;
 
+        // Sentinel filter value for the "No tags" chip, matching items with
+        // an empty tags list. Tags are extracted via a regex that forbids
+        // whitespace (see extractTagsFromTitle), so a value containing a
+        // space can never collide with a real tag.
+        const NO_TAGS_FILTER = "no tags";
+
         // Inline-edit state, shared across the Timers and Archived lists
         // (ids are globally unique, so one pair of variables is enough).
         // editingId is the id of the row currently showing the edit form;
@@ -1557,7 +1563,9 @@
 
         function matchesTagFilter(t, filterSet) {
           if (!filterSet.size) return true;
-          return (t.tags || []).some((tag) => filterSet.has(tag));
+          const tags = t.tags || [];
+          if (filterSet.has(NO_TAGS_FILTER) && !tags.length) return true;
+          return tags.some((tag) => filterSet.has(tag));
         }
 
         function toggleTagInFilter(filterSet, tag) {
@@ -1581,12 +1589,13 @@
         // timers/trash/archive rows are visible.
         function renderTagFilterChips(containerEl, items, filterSet, expanded) {
           const tags = computeAvailableTags(items);
+          const hasUntagged = items.some((t) => !t.tags || !t.tags.length);
           // Even with no tags left to offer as chips, keep rendering when a
           // filter is still active so "Clear filter" stays reachable —
           // otherwise emptying the list (e.g. by deleting the last item
           // with the filtered tag) strands the filter with no way to reset
           // it short of a reload.
-          if (!tags.length && !filterSet.size) {
+          if (!tags.length && !hasUntagged && !filterSet.size) {
             containerEl.innerHTML = "";
             return;
           }
@@ -1608,6 +1617,19 @@
                   `,
                 )
                 .join("")}
+              ${hasUntagged && tags.length
+                ? html`
+                    <button
+                      type="button"
+                      class="tag-filter-chip${filterSet.has(NO_TAGS_FILTER)
+                        ? " active"
+                        : ""}"
+                      data-tag="${escapeHtml(NO_TAGS_FILTER)}"
+                    >
+                      (No tags)
+                    </button>
+                  `
+                : ""}
               ${filterSet.size
                 ? html`<button type="button" class="tag-filter-clear">
                     Clear filter
