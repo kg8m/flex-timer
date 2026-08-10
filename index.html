@@ -597,8 +597,8 @@
 
       .tag-filter {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
+        flex-direction: column;
+        align-items: flex-start;
         gap: 6px;
         margin-bottom: 10px;
       }
@@ -606,6 +606,40 @@
       .tag-filter:empty {
         display: none;
         margin-bottom: 0;
+      }
+
+      .tag-filter-chips {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+      }
+
+      /* Collapsed by default once there are enough tags to wrap past one
+         row (see renderTagFilterChips(), which measures scrollHeight
+         against this same one-row height to decide whether to show the
+         "Show all tags" toggle at all). */
+      .tag-filter-chips.collapsed {
+        max-height: 26px; /* one chip row */
+        overflow: hidden;
+      }
+
+      .tag-filter-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 20px;
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        font-size: 12px;
+        text-decoration: underline;
+        padding: 0 4px;
+      }
+
+      .tag-filter-toggle:hover {
+        background: rgba(156, 163, 175, 0.12);
+        border-radius: 6px;
       }
 
       .tag-filter-chip {
@@ -1334,6 +1368,8 @@
               d="M6 3h12M6 21h12M7 3Q7 10 12 12Q7 14 7 21M17 3Q17 10 12 12Q17 14 17 21"
             ></path>
           `,
+          "chevron-down": html`<polyline points="6 9 12 15 18 9"></polyline>`,
+          "chevron-up": html`<polyline points="18 15 12 9 6 15"></polyline>`,
         };
 
         function icon(name, size = 18) {
@@ -1492,6 +1528,13 @@
         let archiveTagFilter = new Set();
         let trashTagFilter = new Set();
 
+        // Whether each list's tag filter chip bar is expanded past its
+        // collapsed one-row height (see .tag-filter-chips.collapsed). Kept
+        // in memory only, like the filter sets above.
+        let timersTagFilterExpanded = false;
+        let archiveTagFilterExpanded = false;
+        let trashTagFilterExpanded = false;
+
         // Inline-edit state, shared across the Timers and Archived lists
         // (ids are globally unique, so one pair of variables is enough).
         // editingId is the id of the row currently showing the edit form;
@@ -1524,10 +1567,18 @@
           }
         }
 
+        // Must match .tag-filter-chips.collapsed's max-height in the <style>.
+        const TAG_FILTER_COLLAPSED_HEIGHT = 26;
+
         // Renders the tag chip bar for one list, offering every tag present
         // among that list's own items (not just the currently filtered
         // subset), so deselecting a tag doesn't remove it from the choices.
-        function renderTagFilterChips(containerEl, items, filterSet) {
+        // When there are enough tags to wrap past one row, the chip bar
+        // starts collapsed to one row with a toggle to expand/collapse it
+        // (tracked via `expanded`, owned by the caller) — otherwise a list
+        // with many distinct tags eats a lot of vertical space before any
+        // timers/trash/archive rows are visible.
+        function renderTagFilterChips(containerEl, items, filterSet, expanded) {
           const tags = computeAvailableTags(items);
           // Even with no tags left to offer as chips, keep rendering when a
           // filter is still active so "Clear filter" stays reachable —
@@ -1540,27 +1591,48 @@
           }
 
           containerEl.innerHTML = html`
-            ${tags
-              .map(
-                (tag) => html`
-                  <button
-                    type="button"
-                    class="tag-filter-chip${filterSet.has(tag)
-                      ? " active"
-                      : ""}"
-                    data-tag="${escapeHtml(tag)}"
-                  >
-                    #${escapeHtml(tag)}
-                  </button>
-                `,
-              )
-              .join("")}
-            ${filterSet.size
-              ? html`<button type="button" class="tag-filter-clear">
-                  Clear filter
-                </button>`
-              : ""}
+            <div class="tag-filter-chips">
+              ${tags
+                .map(
+                  (tag) => html`
+                    <button
+                      type="button"
+                      class="tag-filter-chip${filterSet.has(tag)
+                        ? " active"
+                        : ""}"
+                      data-tag="${escapeHtml(tag)}"
+                    >
+                      #${escapeHtml(tag)}
+                    </button>
+                  `,
+                )
+                .join("")}
+              ${filterSet.size
+                ? html`<button type="button" class="tag-filter-clear">
+                    Clear filter
+                  </button>`
+                : ""}
+            </div>
           `;
+
+          // Measured before the "collapsed" class (and its max-height) is
+          // applied, so scrollHeight reflects the bar's natural, unclipped
+          // height — comparable directly against the CSS's one-row cap.
+          const chipsEl = containerEl.querySelector(".tag-filter-chips");
+          const overflowsOneRow =
+            chipsEl.scrollHeight > TAG_FILTER_COLLAPSED_HEIGHT;
+          chipsEl.classList.toggle("collapsed", overflowsOneRow && !expanded);
+          if (overflowsOneRow) {
+            containerEl.insertAdjacentHTML(
+              "beforeend",
+              html`
+                <button type="button" class="tag-filter-toggle">
+                  ${icon(expanded ? "chevron-up" : "chevron-down", 12)}
+                  ${expanded ? "Show fewer tags" : "Show all tags"}
+                </button>
+              `,
+            );
+          }
         }
 
         // Inline edit form shown in place of a row's normal content. Shared
@@ -1809,7 +1881,12 @@
         const timersTagFilterEl = $("#timers-tag-filter");
 
         function render() {
-          renderTagFilterChips(timersTagFilterEl, timers, timersTagFilter);
+          renderTagFilterChips(
+            timersTagFilterEl,
+            timers,
+            timersTagFilter,
+            timersTagFilterExpanded,
+          );
 
           // sort by end time ascending
           const sorted = [...timers]
@@ -2015,7 +2092,12 @@
         const trashTagFilterEl = $("#trash-tag-filter");
 
         function renderTrash() {
-          renderTagFilterChips(trashTagFilterEl, trash, trashTagFilter);
+          renderTagFilterChips(
+            trashTagFilterEl,
+            trash,
+            trashTagFilter,
+            trashTagFilterExpanded,
+          );
 
           // sort by soonest to purge first
           const sorted = [...trash]
@@ -2091,7 +2173,12 @@
         const archiveTagFilterEl = $("#archive-tag-filter");
 
         function renderArchived() {
-          renderTagFilterChips(archiveTagFilterEl, archived, archiveTagFilter);
+          renderTagFilterChips(
+            archiveTagFilterEl,
+            archived,
+            archiveTagFilter,
+            archiveTagFilterExpanded,
+          );
 
           // most recently archived first
           const sorted = [...archived]
@@ -2521,12 +2608,15 @@
           handleEditKeydown(renderArchived),
         );
 
-        // Tag filter chip bars (select/deselect a tag, or clear the filter)
-        function handleTagFilterClick(e, filterSet, rerender) {
+        // Tag filter chip bars (select/deselect a tag, clear the filter, or
+        // expand/collapse the chip bar via toggleExpanded)
+        function handleTagFilterClick(e, filterSet, rerender, toggleExpanded) {
           const btn = e.target.closest("button");
           if (!btn) return;
 
-          if (btn.classList.contains("tag-filter-clear")) {
+          if (btn.classList.contains("tag-filter-toggle")) {
+            toggleExpanded();
+          } else if (btn.classList.contains("tag-filter-clear")) {
             filterSet.clear();
           } else {
             toggleTagInFilter(filterSet, btn.dataset.tag);
@@ -2536,13 +2626,19 @@
         }
 
         timersTagFilterEl.addEventListener("click", (e) => {
-          handleTagFilterClick(e, timersTagFilter, render);
+          handleTagFilterClick(e, timersTagFilter, render, () => {
+            timersTagFilterExpanded = !timersTagFilterExpanded;
+          });
         });
         trashTagFilterEl.addEventListener("click", (e) => {
-          handleTagFilterClick(e, trashTagFilter, renderTrash);
+          handleTagFilterClick(e, trashTagFilter, renderTrash, () => {
+            trashTagFilterExpanded = !trashTagFilterExpanded;
+          });
         });
         archiveTagFilterEl.addEventListener("click", (e) => {
-          handleTagFilterClick(e, archiveTagFilter, renderArchived);
+          handleTagFilterClick(e, archiveTagFilter, renderArchived, () => {
+            archiveTagFilterExpanded = !archiveTagFilterExpanded;
+          });
         });
 
         // Clear all timers
