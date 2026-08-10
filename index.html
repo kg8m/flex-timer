@@ -1161,7 +1161,8 @@
         // Pull #tag tokens out of a title string instead of requiring a
         // separate tags field: any "#" followed by non-whitespace becomes a
         // tag (normalized like the old comma-separated input — trimmed,
-        // lowercased, deduped) and is removed from the displayed title.
+        // lowercased, deduped, sorted alphabetically regardless of input
+        // order) and is removed from the displayed title.
         function extractTagsFromTitle(rawTitle) {
           const tags = [];
           const title = String(rawTitle || "")
@@ -1172,7 +1173,7 @@
             .replace(/\s+/g, " ")
             .trim();
 
-          return { title, tags: [...new Set(tags)] };
+          return { title, tags: [...new Set(tags)].sort() };
         }
 
         // Inverse of extractTagsFromTitle: reassemble the raw text a user
