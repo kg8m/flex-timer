@@ -635,7 +635,7 @@
          so it visibly covers the tail end of the row it's truncating,
          as a cue that there's more beyond it. */
       .tag-filter-chips.collapsed {
-        max-height: 26px; /* one chip row */
+        max-height: 32px; /* one chip row (26px) + its bottom margin (6px) */
         overflow: hidden;
       }
 
@@ -1692,7 +1692,10 @@
         }
 
         // Must match .tag-filter-chips.collapsed's max-height in the <style>.
-        const TAG_FILTER_COLLAPSED_HEIGHT = 26;
+        // 26px chip height + 6px margin-bottom (see .tag-filter-chip) —
+        // scrollHeight includes that trailing margin, so the threshold
+        // must too, or even a single row reads as overflowing.
+        const TAG_FILTER_COLLAPSED_HEIGHT = 32;
 
         // Renders the tag chip bar for one list, offering every tag present
         // among that list's own items (not just the currently filtered
