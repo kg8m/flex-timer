@@ -1,6 +1,6 @@
-# simple-timer
+# flex-timer
 
-A simple timer web application made with ChatGPT and Claude.
+A flexible multi-timer web app with tags, timer modes, and archiving — built with ChatGPT and Claude.
 
 ## Usage
 

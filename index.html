@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Simple Timer</title>
+    <title>Flex Timer</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link
       rel="icon"
@@ -928,7 +928,7 @@
   <body>
     <div class="container">
       <div class="header">
-        <h1>Simple Timer</h1>
+        <h1>Flex Timer</h1>
       </div>
 
       <div class="sticky-sentinel" aria-hidden="true">
@@ -1139,7 +1139,17 @@
         const TRASH_RETENTION_MS = 5 * 60 * 1000;
 
         /*** LocalStorage ***/
-        const STORAGE_KEY = "simple-timer-data";
+        const STORAGE_KEY = "flex-timer-data";
+        // TODO: Rename migration from the simple-timer era. Safe to remove around 2027.
+        const LEGACY_STORAGE_KEY = "simple-timer-data";
+
+        function migrateLegacyStorage() {
+          if (localStorage.getItem(STORAGE_KEY) !== null) return;
+          const legacyData = localStorage.getItem(LEGACY_STORAGE_KEY);
+          if (legacyData === null) return;
+          localStorage.setItem(STORAGE_KEY, legacyData);
+          localStorage.removeItem(LEGACY_STORAGE_KEY);
+        }
 
         function saveToStorage() {
           try {
@@ -1154,6 +1164,7 @@
 
         function loadFromStorage() {
           try {
+            migrateLegacyStorage();
             const data = localStorage.getItem(STORAGE_KEY);
             if (data) {
               const parsed = JSON.parse(data);
