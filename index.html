@@ -596,6 +596,7 @@
       }
 
       .tag-filter {
+        position: relative;
         display: flex;
         flex-direction: column;
         align-items: flex-start;
@@ -608,45 +609,49 @@
         margin-bottom: 0;
       }
 
+      /* A block (not flex) formatting context, so the "Show all/fewer
+         tags" toggle below can be floated at the top-right with chips
+         wrapping around it the way text wraps around a floated image —
+         flexbox has no equivalent of that. display: flow-root (rather
+         than plain block) also contains the float for this container's
+         own height, so it still grows to fit every row once expanded.
+         font-size: 0 cancels out the whitespace text nodes between each
+         chip in the generated markup, which would otherwise add their
+         own (unwanted) width/height now that chips lay out as inline
+         text rather than flex items; each chip restores its own
+         font-size below. */
       .tag-filter-chips {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 6px;
+        display: flow-root;
+        font-size: 0;
       }
 
       /* Collapsed by default once there are enough tags to wrap past one
          row (see renderTagFilterChips(), which measures scrollHeight
          against this same one-row height to decide whether to show the
-         "Show all tags" toggle at all). */
+         "Show all tags" toggle at all). While collapsed, the toggle is
+         rendered as a sibling (not a child in the flow here) and
+         overlaid on top of this row instead of floating inside it —
+         see ".tag-filter-chips.collapsed ~ .tag-filter-toggle" below —
+         so it visibly covers the tail end of the row it's truncating,
+         as a cue that there's more beyond it. */
       .tag-filter-chips.collapsed {
         max-height: 26px; /* one chip row */
         overflow: hidden;
       }
 
-      .tag-filter-toggle {
-        display: flex;
+      .tag-filter-chip,
+      .tag-filter-clear {
+        display: inline-flex;
         align-items: center;
-        gap: 6px;
-        height: 20px;
-        border: none;
-        background: transparent;
-        color: var(--muted);
+        vertical-align: middle;
         font-size: 12px;
-        text-decoration: underline;
-        padding: 0 4px;
-      }
-
-      .tag-filter-toggle:hover {
-        background: rgba(156, 163, 175, 0.12);
-        border-radius: 6px;
+        margin: 0 6px 6px 0;
       }
 
       .tag-filter-chip {
         height: 26px;
         border-radius: 999px;
         padding: 0 10px;
-        font-size: 12px;
         background: transparent;
         border: 1px solid var(--border);
         color: var(--muted);
@@ -672,7 +677,6 @@
         border: none;
         background: transparent;
         color: var(--muted);
-        font-size: 12px;
         text-decoration: underline;
         padding: 0 4px;
       }
@@ -680,6 +684,106 @@
       .tag-filter-clear:hover {
         background: rgba(156, 163, 175, 0.12);
         border-radius: 6px;
+      }
+
+      /* Expanded state only (see renderTagFilterChips(), which only
+         inserts the toggle as a child here — floated — when expanded;
+         the collapsed state overlays it instead, see below). Floated
+         top-right as the *first* child of .tag-filter-chips so every
+         chip after it in the markup wraps around it, the same way text
+         wraps around a floated image. Its height (matching a chip row)
+         means only the first row is affected; once wrapped chips clear
+         it, further rows use the full width. Horizontal padding is
+         slightly wider than the icon/text gap so the hover highlight
+         doesn't look tighter around the icon than the icon and text
+         are around each other. */
+      .tag-filter-toggle {
+        float: right;
+        display: flex;
+        align-items: center;
+        height: 26px;
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        font-size: 12px;
+        text-decoration: underline;
+        padding: 0 8px;
+        margin: 0 0 6px 6px;
+      }
+
+      .tag-filter-toggle:hover {
+        background: rgba(156, 163, 175, 0.12);
+        border-radius: 6px;
+      }
+
+      /* Wraps the icon+text so they paint as a *positioned* descendant
+         with an explicit stack level above ::before/::after below — per
+         the CSS stacking rules, a non-positioned descendant (plain
+         icon/text) always paints *before* any positioned one regardless
+         of DOM order, so without this wrapper the collapsed-state
+         ::before's opaque backdrop would render on top of the label
+         instead of behind it. */
+      .tag-filter-toggle-label {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      /* Collapsed state only: overlaid on top of the one-row chip bar
+         (see the ".collapsed" rule above) instead of floating inside
+         it, so "Show all tags" visibly sits over the tail end of the
+         row — a cue that it's truncating, not just wrapping — while
+         staying right-aligned with the row's right edge. Its own
+         background stays transparent; ::before/::after below are what's
+         actually visible across this button's whole box, since they
+         fully cover it. */
+      .tag-filter-chips.collapsed ~ .tag-filter-toggle {
+        float: none;
+        position: absolute;
+        top: 0;
+        right: 0;
+        margin: 0;
+      }
+
+      /* The blur/fade backdrop for the chip(s) this toggle covers. This
+         (not the button's own background) is what's actually visible
+         across the button's own box (see above). mask-image fades this
+         layer's opacity — backdrop-filter and all — from 0 at its own
+         left edge up to fully opaque at the button's left edge, so the
+         blur ramps up gradually as chips approach the toggle instead of
+         switching on abruptly right at this box's edge. */
+      .tag-filter-chips.collapsed ~ .tag-filter-toggle::before {
+        content: "";
+        position: absolute;
+        z-index: 0;
+        top: 0;
+        bottom: 0;
+        right: 0;
+        left: -28px;
+        background: linear-gradient(to right, transparent, var(--card) 28px);
+        backdrop-filter: blur(3px);
+        -webkit-backdrop-filter: blur(3px);
+        mask-image: linear-gradient(to right, transparent, black 28px);
+        -webkit-mask-image: linear-gradient(to right, transparent, black 28px);
+      }
+
+      /* The hover highlight, sized to exactly the button's own box
+         (unlike ::before above, which extends further left into the
+         blur/fade zone) so it can have rounded corners like every other
+         chip/toggle in this bar, and so hovering doesn't tint the
+         chip(s) ::before is fading out. */
+      .tag-filter-chips.collapsed ~ .tag-filter-toggle::after {
+        content: "";
+        position: absolute;
+        z-index: 0;
+        inset: 0;
+        border-radius: 6px;
+      }
+
+      .tag-filter-chips.collapsed ~ .tag-filter-toggle:hover::after {
+        background: rgba(156, 163, 175, 0.12);
       }
 
       .sr-only {
@@ -1646,15 +1750,30 @@
             chipsEl.scrollHeight > TAG_FILTER_COLLAPSED_HEIGHT;
           chipsEl.classList.toggle("collapsed", overflowsOneRow && !expanded);
           if (overflowsOneRow) {
-            containerEl.insertAdjacentHTML(
-              "beforeend",
-              html`
-                <button type="button" class="tag-filter-toggle">
+            const toggleHtml = html`
+              <button type="button" class="tag-filter-toggle">
+                <span class="tag-filter-toggle-label">
                   ${icon(expanded ? "chevron-up" : "chevron-down", 12)}
                   ${expanded ? "Show fewer tags" : "Show all tags"}
-                </button>
-              `,
-            );
+                </span>
+              </button>
+            `;
+
+            if (expanded) {
+              // Inserted as the *first* child (not appended) so every
+              // chip after it in the DOM floats around it (see the
+              // ".tag-filter-toggle" float rule in the <style>) — a
+              // float only affects content that follows it, so it has
+              // to come before the chips it's meant to make room for.
+              chipsEl.insertAdjacentHTML("afterbegin", toggleHtml);
+            } else {
+              // Collapsed: rendered as a sibling and overlaid on top of
+              // the one-row chip bar instead (see
+              // ".tag-filter-chips.collapsed ~ .tag-filter-toggle" in
+              // the <style>), so it visibly covers the tail end of the
+              // truncated row rather than reserving room inside it.
+              containerEl.insertAdjacentHTML("beforeend", toggleHtml);
+            }
           }
         }
 
