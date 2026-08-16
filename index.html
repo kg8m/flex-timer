@@ -625,8 +625,14 @@
         flex-wrap: wrap;
       }
 
+      /* z-index: 0 (not just position: relative) so this establishes its
+         own stacking context — otherwise .tag-filter-toggle-label's
+         z-index: 1 below escapes all the way up to the root stacking
+         context, where it ties with .sticky-form's z-index: 1 and wins
+         on DOM order (later element), overlapping the sticky form. */
       .tag-filter {
         position: relative;
+        z-index: 0;
         display: flex;
         flex-direction: column;
         align-items: flex-start;
