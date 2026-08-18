@@ -615,9 +615,9 @@
         margin-left: auto;
       }
 
-      /* Shown only at the narrow breakpoint below (see .snooze-label-wide/
-         .snooze-unit there), where the full "Snooze for … min" wording
-         doesn't fit on one line. */
+      /* Shown only at the narrow breakpoint below (see .snooze-label-wide
+         there), where the full "Snooze for …" wording doesn't fit on one
+         line alongside the input and its two buttons. */
       .snooze-label-narrow {
         display: none;
       }
@@ -982,12 +982,10 @@
           display: inline-flex;
         }
 
-        /* "Snooze for … min" plus the input and its two buttons wraps onto
-           a second line at this width — swap to the shorter "Snooze:" (the
-           input's aria-label already carries the dropped "min" unit for
-           a11y) so it all still fits on one line. */
-        .snooze-label-wide,
-        .snooze-unit {
+        /* "Snooze for …" plus the input and its two buttons wraps onto a
+           second line at this width — swap to the shorter "Snooze:" so it
+           all still fits on one line. */
+        .snooze-label-wide {
           display: none;
         }
 
@@ -1780,7 +1778,7 @@
         let editDraft = null;
 
         // snoozingId/snoozeDraft mirror editingId/editDraft above, but for
-        // the inline "extend by N minutes" form shown on a Done timer.
+        // the inline "extend by" form shown on a Done timer.
         let snoozingId = null;
         let snoozeDraft = null;
 
@@ -2071,28 +2069,26 @@
           return true;
         }
 
-        // Inline "extend by N minutes" form shown in place of a Done
-        // timer's Ends At/Remaining/Status/Controls — the title (unlike
+        // Inline "extend by" form shown in place of a Done timer's Ends
+        // At/Remaining/Status/Controls — the title (unlike
         // editRowHtml, which replaces the whole row including the title)
         // stays put. Only offered for active timers, so unlike editRowHtml
         // this doesn't need to handle the archived-item shape.
         function snoozeFormHtml(t) {
-          const draft = snoozeDraft || { minutes: "5" };
+          const draft = snoozeDraft || { value: "5" };
 
           return html`
             <div class="edit-row snooze-row">
               <span class="snooze-label snooze-label-wide">Snooze for</span>
               <span class="snooze-label snooze-label-narrow">Snooze:</span>
               <input
-                type="number"
+                type="text"
                 inputmode="numeric"
-                min="1"
-                step="1"
                 class="snooze-value"
-                aria-label="Snooze minutes"
-                value="${escapeHtml(draft.minutes)}"
+                aria-label="Snooze duration (mm:ss or minutes)"
+                placeholder="5:00 / 5 / 1h / 30s"
+                value="${escapeHtml(draft.value)}"
               />
-              <span class="snooze-label snooze-unit">min</span>
               <div class="controls">
                 <button
                   class="accent"
@@ -2119,19 +2115,20 @@
 
         // Apply a snooze form's current input value to `t`. Returns false
         // (leaving the form open) if the value doesn't parse to a positive
-        // number of minutes. Deliberately doesn't touch originalDuration/
-        // targetTime, so a later Restart still uses the timer's original
-        // setting rather than the snoozed length.
+        // duration — same mm:ss / minutes / 1h / 30s / 2d format as the
+        // Duration mode field, via parseDuration(). Deliberately doesn't
+        // touch originalDuration/targetTime, so a later Restart still uses
+        // the timer's original setting rather than the snoozed length.
         function saveSnooze(row, t) {
           const valueInput = $(".snooze-value", row);
-          const minutes = Number(valueInput.value);
+          const dur = parseDuration(valueInput.value);
 
-          if (!Number.isFinite(minutes) || minutes <= 0) {
-            alert("Enter snooze duration in minutes (a positive number).");
+          if (!dur || dur <= 0) {
+            alert("Enter snooze duration as mm:ss or minutes (number).");
             return false;
           }
 
-          t.endAt = alignEndAtToSecond(Date.now() + minutes * 60_000);
+          t.endAt = alignEndAtToSecond(Date.now() + dur);
           t.notified = false;
           t.snoozed = true;
 
@@ -2266,7 +2263,7 @@
           const row = e.target.closest(".timer");
           if (!row || Number(row.dataset.id) !== snoozingId) return;
 
-          snoozeDraft = { minutes: e.target.value };
+          snoozeDraft = { value: e.target.value };
         }
 
         const timersTagFilterEl = $("#timers-tag-filter");
