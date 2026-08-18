@@ -2909,10 +2909,17 @@
             saveToStorage();
             render();
           } else if (act === "skip" && t && t.mode === "time") {
-            t.endAt = advanceToAllowedDay(
-              t.endAt + 24 * 60 * 60 * 1000,
+            // While snoozed, t.endAt holds the snooze re-fire time rather
+            // than an on-schedule target-time instant, so re-deriving from
+            // t.targetTime (anchored to t.endAt's calendar day) rather than
+            // just adding 24h keeps the skip aligned to the actual target
+            // time even mid-snooze.
+            t.endAt = computeNextTimeBasedEndAt(
+              t.targetTime,
+              t.endAt,
               t.daysOfWeek,
             );
+            t.snoozed = false;
             saveToStorage();
             render();
           } else if (act === "edit" && t) {
