@@ -1648,13 +1648,14 @@
 
         // Small badge indicating whether a timer was set by duration or by
         // a target clock time. Tooltip shows the concrete value (e.g. the
-        // original duration) so it's visible even when a title hides the
-        // fallback label.
+        // original duration, or the originally configured target time —
+        // the latter matters once Snooze can push endAt past it) so it's
+        // visible even when a title hides the fallback label.
         function modeBadge(t) {
           const isTime = t.mode === "time";
           const days = isTime ? daysOfWeekLabel(t.daysOfWeek) : "";
           const label = isTime
-            ? `At time${days ? ` — ${days}` : ""}`
+            ? `At time: ${formatTimerLabel(t)}${days ? ` — ${days}` : ""}`
             : `Duration: ${formatDurationLabel(t.originalDuration)}`;
 
           return html`
