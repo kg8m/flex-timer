@@ -525,6 +525,11 @@
         font-weight: 700;
       }
 
+      .when.snoozed {
+        color: var(--snoozed);
+        font-weight: 700;
+      }
+
       /* Desktop: text label. Narrow (see media query below): icon only. */
       .status-icon {
         display: none;
@@ -2032,6 +2037,7 @@
             if ("endAt" in t) {
               t.endAt = endAt;
               t.notified = false;
+              t.snoozed = false;
             }
           } else {
             const dur = parseDuration(valueInput.value);
@@ -2053,6 +2059,7 @@
                 t.endAt += delta;
               }
               t.notified = false;
+              t.snoozed = false;
             }
           }
 
@@ -2418,13 +2425,18 @@
                 `
               : "";
 
+            // .when picks up a "snoozed" class from t.snoozed so a snoozed
+            // run's Ends At time stays visually distinct even after it
+            // reaches Done again — t.snoozed is only cleared by Restart or
+            // Edit (see saveEdit), which define a genuinely new run,
+            // deliberately not by tick()'s natural-completion branch.
             const restOfRowHtml =
               t.id === snoozingId
                 ? snoozeFormHtml(t)
                 : html`
                     <div class="when-remain">
                       <div
-                        class="when"
+                        class="when ${t.snoozed ? "snoozed" : ""}"
                         ${!t.paused && !isSameDay(t.endAt, now)
                           ? `data-tooltip="${toDateWithWeekday(t.endAt)}" aria-label="${toDateWithWeekday(t.endAt)} — ${toTime(t.endAt)}"`
                           : ""}
@@ -3161,7 +3173,6 @@
           for (const t of timers) {
             if (!t.paused && !t.notified && now >= t.endAt) {
               t.notified = true;
-              t.snoozed = false;
               playBeep(3, 1000, 0.18, 0.08);
               changed = true;
             }
