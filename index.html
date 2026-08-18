@@ -31,6 +31,7 @@
         --danger: #ef4444;
         --ok: #22c55e;
         --paused: #f97316;
+        --snoozed: #38bdf8;
         --border: #1f2937;
       }
 
@@ -516,6 +517,11 @@
 
       .status.paused {
         color: var(--paused);
+        font-weight: 700;
+      }
+
+      .status.snoozed {
+        color: var(--snoozed);
         font-weight: 700;
       }
 
@@ -1518,7 +1524,8 @@
         // glyph in the UI shares one stroke weight/color model instead of
         // mixing emoji drawn in unrelated styles. Color comes from the CSS
         // `color` of whatever wraps the icon (buttons already carry
-        // accent/warn/danger/neutral colors; .status.ok/.paused/.done too),
+        // accent/warn/danger/neutral colors; .status.ok/.paused/.done/
+        // .snoozed too),
         // so call sites never need to pick a color themselves.
         const STROKE_ICON_PATHS = {
           "refresh-cw": html`
@@ -1632,7 +1639,8 @@
 
         // Compact status glyph shown at narrow widths (kept visually distinct
         // from the Actions icons: a plain dot, not a shape like play/pause).
-        // Color comes from the wrapping .status.ok/.paused/.done class, so
+        // Color comes from the wrapping .status.ok/.paused/.done/.snoozed
+        // class, so
         // the dot itself doesn't need to branch on statusText.
         function statusIconFor(statusText) {
           return icon("circle", 14);
@@ -2316,6 +2324,9 @@
             } else if (done) {
               statusText = "Done";
               statusClass = "done";
+            } else if (t.snoozed) {
+              statusText = "Snoozed";
+              statusClass = "snoozed";
             } else {
               statusText = "Running";
               statusClass = "ok";
@@ -3149,6 +3160,7 @@
           for (const t of timers) {
             if (!t.paused && !t.notified && now >= t.endAt) {
               t.notified = true;
+              t.snoozed = false;
               playBeep(3, 1000, 0.18, 0.08);
               changed = true;
             }
@@ -3220,7 +3232,7 @@
               statusEl.setAttribute("data-tooltip", text);
               statusIconEl.innerHTML = statusIconFor(text);
               statusTextEl.textContent = text;
-              statusEl.classList.remove("ok", "paused", "done");
+              statusEl.classList.remove("ok", "paused", "done", "snoozed");
               statusEl.classList.add(statusClass);
             }
 
