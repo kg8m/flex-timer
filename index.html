@@ -379,7 +379,10 @@
         transform: rotate(90deg);
       }
 
-      /* Controls column is wide enough to fit its icon buttons on one line.
+      /* Controls column (238px) is wide enough to fit its icon buttons on
+         one line even in the busiest state — a Done timer showing
+         Restart/Snooze/Edit/Archive/Delete: 5 × 36px buttons + 4 × 8px
+         gaps = 212px, + ~26px breathing room.
          Ends At/Remaining (196px = two 94px halves + 8px gap; 94px = 78px
          measured max content for "999:59:59" + 16px breathing room) and
          Status (72px = 64px measured max content for bold "Running" + 8px
@@ -387,7 +390,7 @@
          track) can claim all remaining space. */
       .timer {
         display: grid;
-        grid-template-columns: 1fr 196px 72px 194px;
+        grid-template-columns: 1fr 196px 72px 238px;
         gap: 10px;
         align-items: center;
         border-top: 1px solid var(--border);
@@ -586,6 +589,28 @@
         flex-wrap: wrap;
       }
 
+      /* Snooze form: title stays put, but everything after it (Ends At/
+         Remaining/Status/Controls) is replaced by this form, so it only
+         needs to span from the second column onward, not the whole row. */
+      .snooze-row {
+        grid-column: 2 / -1;
+      }
+
+      /* Pushes Confirm/Cancel to the row's right edge (to match Edit's own
+         Save/Cancel, which land there as a side effect of its growing
+         title/value inputs) instead of leaving the rest of this wide
+         column empty next to a left-clustered label/input/label group. */
+      .snooze-row .controls {
+        margin-left: auto;
+      }
+
+      /* Shown only at the narrow breakpoint below (see .snooze-label-wide/
+         .snooze-unit there), where the full "Snooze for … min" wording
+         doesn't fit on one line. */
+      .snooze-label-narrow {
+        display: none;
+      }
+
       .edit-row .edit-title {
         flex: 2 1 200px;
         min-width: 0;
@@ -593,6 +618,11 @@
 
       .edit-row .edit-value {
         flex: 1 1 120px;
+        min-width: 0;
+      }
+
+      .edit-row .snooze-value {
+        flex: 0 0 70px;
         min-width: 0;
       }
 
@@ -941,6 +971,19 @@
           display: inline-flex;
         }
 
+        /* "Snooze for … min" plus the input and its two buttons wraps onto
+           a second line at this width — swap to the shorter "Snooze:" (the
+           input's aria-label already carries the dropped "min" unit for
+           a11y) so it all still fits on one line. */
+        .snooze-label-wide,
+        .snooze-unit {
+          display: none;
+        }
+
+        .snooze-label-narrow {
+          display: inline;
+        }
+
         /* Rows: colored dot instead of the text label (Actions icons stay untouched) */
         .status-icon {
           display: inline;
@@ -1174,7 +1217,7 @@
     <script>
       (() => {
         /*** State ***/
-        /** @type {{id:number,title:string,tags:string[],endAt:number,createdAt:number,notified:boolean,paused:boolean,pausedAt?:number,remainingAtPause?:number,originalDuration:number,daysOfWeek?:number[]}[]} */
+        /** @type {{id:number,title:string,tags:string[],endAt:number,createdAt:number,notified:boolean,snoozed:boolean,paused:boolean,pausedAt?:number,remainingAtPause?:number,originalDuration:number,daysOfWeek?:number[]}[]} */
         let timers = [];
         /** @type {{id:number,title:string,tags:string[],originalDuration:number,deletedAt:number,daysOfWeek?:number[]}[]} */
         let trash = [];
@@ -1532,6 +1575,12 @@
           `,
           "chevron-down": html`<polyline points="6 9 12 15 18 9"></polyline>`,
           "chevron-up": html`<polyline points="18 15 12 9 6 15"></polyline>`,
+          "clock-plus": html`
+            <path d="M20.5 12A9.5 9.5 0 1 1 11 2.5"></path>
+            <polyline points="11 8 11 12 14.5 14"></polyline>
+            <line x1="17.7" y1="2.5" x2="17.7" y2="8.1"></line>
+            <line x1="14.9" y1="5.3" x2="20.5" y2="5.3"></line>
+          `,
         };
 
         function icon(name, size = 18) {
@@ -1715,6 +1764,11 @@
         // original values on every keystroke-unrelated re-render.
         let editingId = null;
         let editDraft = null;
+
+        // snoozingId/snoozeDraft mirror editingId/editDraft above, but for
+        // the inline "extend by N minutes" form shown on a Done timer.
+        let snoozingId = null;
+        let snoozeDraft = null;
 
         function computeAvailableTags(items) {
           const set = new Set();
@@ -2001,6 +2055,83 @@
           return true;
         }
 
+        // Inline "extend by N minutes" form shown in place of a Done
+        // timer's Ends At/Remaining/Status/Controls — the title (unlike
+        // editRowHtml, which replaces the whole row including the title)
+        // stays put. Only offered for active timers, so unlike editRowHtml
+        // this doesn't need to handle the archived-item shape.
+        function snoozeFormHtml(t) {
+          const draft = snoozeDraft || { minutes: "5" };
+
+          return html`
+            <div class="edit-row snooze-row">
+              <span class="snooze-label snooze-label-wide">Snooze for</span>
+              <span class="snooze-label snooze-label-narrow">Snooze:</span>
+              <input
+                type="number"
+                inputmode="numeric"
+                min="1"
+                step="1"
+                class="snooze-value"
+                aria-label="Snooze minutes"
+                value="${escapeHtml(draft.minutes)}"
+              />
+              <span class="snooze-label snooze-unit">min</span>
+              <div class="controls">
+                <button
+                  class="accent"
+                  data-act="confirm-snooze"
+                  data-tooltip="Snooze"
+                  aria-label="Snooze"
+                  type="button"
+                >
+                  ${icon("check")}
+                </button>
+                <button
+                  class="neutral"
+                  data-act="cancel-snooze"
+                  data-tooltip="Cancel"
+                  aria-label="Cancel"
+                  type="button"
+                >
+                  ${icon("x")}
+                </button>
+              </div>
+            </div>
+          `;
+        }
+
+        // Apply a snooze form's current input value to `t`. Returns false
+        // (leaving the form open) if the value doesn't parse to a positive
+        // number of minutes. Deliberately doesn't touch originalDuration/
+        // targetTime, so a later Restart still uses the timer's original
+        // setting rather than the snoozed length.
+        function saveSnooze(row, t) {
+          const valueInput = $(".snooze-value", row);
+          const minutes = Number(valueInput.value);
+
+          if (!Number.isFinite(minutes) || minutes <= 0) {
+            alert("Enter snooze duration in minutes (a positive number).");
+            return false;
+          }
+
+          t.endAt = alignEndAtToSecond(Date.now() + minutes * 60_000);
+          t.notified = false;
+          t.snoozed = true;
+
+          snoozingId = null;
+          snoozeDraft = null;
+          return true;
+        }
+
+        function focusSnoozeValue(containerEl) {
+          const input = $(".snoozing .snooze-value", containerEl);
+          if (input) {
+            input.focus();
+            input.select();
+          }
+        }
+
         function focusEditTitle(containerEl) {
           const input = $(".editing .edit-title", containerEl);
           if (input) {
@@ -2083,6 +2214,45 @@
           }
         }
 
+        // Enter-to-confirm / Escape-to-cancel for the snooze form. Only
+        // active timers offer Snooze, so unlike handleEditKeydown this
+        // doesn't need a renderFn parameter — it always re-renders the
+        // Timers list.
+        function handleSnoozeKeydown(e) {
+          if (!e.target.matches(".snooze-value")) return;
+
+          if (e.key === "Escape") {
+            snoozingId = null;
+            snoozeDraft = null;
+            render();
+          } else if (e.key === "Enter") {
+            if (e.isComposing) return;
+
+            const row = e.target.closest(".timer");
+            const id = Number(row?.dataset.id);
+            const t = timers.find((x) => x.id === id);
+
+            if (t && saveSnooze(row, t)) {
+              saveToStorage();
+              render();
+            }
+          }
+        }
+
+        // Keep snoozeDraft in sync with in-progress (unsaved) input so a
+        // full render() triggered by unrelated state doesn't reset it back
+        // to the default value.
+        function handleSnoozeInput(e) {
+          if (snoozingId == null || !e.target.matches(".snooze-value")) {
+            return;
+          }
+
+          const row = e.target.closest(".timer");
+          if (!row || Number(row.dataset.id) !== snoozingId) return;
+
+          snoozeDraft = { minutes: e.target.value };
+        }
+
         const timersTagFilterEl = $("#timers-tag-filter");
 
         function render() {
@@ -2121,7 +2291,7 @@
               continue;
             }
 
-            row.className = "timer";
+            row.className = t.id === snoozingId ? "timer snoozing" : "timer";
 
             const now = Date.now();
             let remaining;
@@ -2131,6 +2301,13 @@
               remaining = t.endAt - now;
             }
             const done = remaining <= 0 && !t.paused;
+
+            // Once Done, offer Snooze. Also keep offering it for the rest
+            // of an already-snoozed run (not just once it's Done again) —
+            // otherwise there's no way to shorten a snooze you regret,
+            // since Edit only ever adjusts originalDuration, not this
+            // one-off endAt override.
+            const canSnooze = done || (t.snoozed && !t.paused);
 
             let statusText, statusClass;
             if (t.paused) {
@@ -2197,6 +2374,131 @@
                   `
                 : "";
 
+            // Only reached when t.id !== snoozingId — see restOfRowHtml
+            // below, which replaces .controls (and everything else after
+            // .title) with snoozeFormHtml() once this row's own form is
+            // open, so there's no redundant trigger sitting next to it.
+            const snoozeBtn = canSnooze
+              ? html`
+                  <button
+                    class="accent wide-action"
+                    data-act="snooze"
+                    data-tooltip="Snooze"
+                    aria-label="Snooze"
+                    type="button"
+                  >
+                    ${icon("clock-plus")}
+                  </button>
+                `
+              : "";
+
+            const snoozeMenuItem = canSnooze
+              ? html`
+                  <button
+                    class="accent"
+                    data-act="snooze"
+                    data-tooltip="Snooze"
+                    aria-label="Snooze"
+                    type="button"
+                  >
+                    ${icon("clock-plus")}
+                  </button>
+                `
+              : "";
+
+            const restOfRowHtml =
+              t.id === snoozingId
+                ? snoozeFormHtml(t)
+                : html`
+                    <div class="when-remain">
+                      <div
+                        class="when"
+                        ${!t.paused && !isSameDay(t.endAt, now)
+                          ? `data-tooltip="${toDateWithWeekday(t.endAt)}" aria-label="${toDateWithWeekday(t.endAt)} — ${toTime(t.endAt)}"`
+                          : ""}
+                      >
+                        ${t.paused ? "--:--:--" : toTime(t.endAt)}
+                      </div>
+                      <div class="remain">${humanize(clamp0(remaining))}</div>
+                    </div>
+                    <div
+                      class="status ${statusClass}"
+                      aria-label="${statusText}"
+                      data-tooltip="${statusText}"
+                    >
+                      <span class="status-icon" aria-hidden="true">
+                        ${statusIconFor(statusText)}
+                      </span>
+                      <span class="status-text" aria-hidden="true">
+                        ${statusText}
+                      </span>
+                    </div>
+                    <div class="controls">
+                      ${pauseResumeBtn} ${snoozeBtn} ${skipBtn}
+                      <button
+                        class="neutral wide-action"
+                        data-act="edit"
+                        data-tooltip="Edit"
+                        aria-label="Edit"
+                        type="button"
+                      >
+                        ${icon("edit")}
+                      </button>
+                      <button
+                        class="neutral wide-action"
+                        data-act="archive"
+                        data-tooltip="Archive"
+                        aria-label="Archive"
+                        type="button"
+                      >
+                        ${icon("archive")}
+                      </button>
+                      <button
+                        class="danger"
+                        data-act="delete"
+                        data-tooltip="Delete"
+                        aria-label="Delete"
+                        type="button"
+                      >
+                        ${icon("trash")}
+                      </button>
+                      <div class="row-menu">
+                        <button
+                          class="neutral"
+                          data-act="toggle-menu"
+                          data-tooltip="More actions"
+                          aria-label="More actions"
+                          aria-haspopup="true"
+                          aria-expanded="false"
+                          type="button"
+                        >
+                          ${icon("more-vertical")}
+                        </button>
+                        <div class="row-menu-popover">
+                          ${snoozeMenuItem}
+                          <button
+                            class="neutral"
+                            data-act="edit"
+                            data-tooltip="Edit"
+                            aria-label="Edit"
+                            type="button"
+                          >
+                            ${icon("edit")}
+                          </button>
+                          <button
+                            class="neutral"
+                            data-act="archive"
+                            data-tooltip="Archive"
+                            aria-label="Archive"
+                            type="button"
+                          >
+                            ${icon("archive")}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+
             row.innerHTML = html`
               <div class="title">
                 <div class="title-main">
@@ -2206,92 +2508,7 @@
                 </div>
                 ${tagsHtml(t)}
               </div>
-              <div class="when-remain">
-                <div
-                  class="when"
-                  ${!t.paused && !isSameDay(t.endAt, now)
-                    ? `data-tooltip="${toDateWithWeekday(t.endAt)}" aria-label="${toDateWithWeekday(t.endAt)} — ${toTime(t.endAt)}"`
-                    : ""}
-                >
-                  ${t.paused ? "--:--:--" : toTime(t.endAt)}
-                </div>
-                <div class="remain">${humanize(clamp0(remaining))}</div>
-              </div>
-              <div
-                class="status ${statusClass}"
-                aria-label="${statusText}"
-                data-tooltip="${statusText}"
-              >
-                <span class="status-icon" aria-hidden="true">
-                  ${statusIconFor(statusText)}
-                </span>
-                <span class="status-text" aria-hidden="true">
-                  ${statusText}
-                </span>
-              </div>
-              <div class="controls">
-                ${pauseResumeBtn} ${skipBtn}
-                <button
-                  class="neutral wide-action"
-                  data-act="edit"
-                  data-tooltip="Edit"
-                  aria-label="Edit"
-                  type="button"
-                >
-                  ${icon("edit")}
-                </button>
-                <button
-                  class="neutral wide-action"
-                  data-act="archive"
-                  data-tooltip="Archive"
-                  aria-label="Archive"
-                  type="button"
-                >
-                  ${icon("archive")}
-                </button>
-                <button
-                  class="danger"
-                  data-act="delete"
-                  data-tooltip="Delete"
-                  aria-label="Delete"
-                  type="button"
-                >
-                  ${icon("trash")}
-                </button>
-                <div class="row-menu">
-                  <button
-                    class="neutral"
-                    data-act="toggle-menu"
-                    data-tooltip="More actions"
-                    aria-label="More actions"
-                    aria-haspopup="true"
-                    aria-expanded="false"
-                    type="button"
-                  >
-                    ${icon("more-vertical")}
-                  </button>
-                  <div class="row-menu-popover">
-                    <button
-                      class="neutral"
-                      data-act="edit"
-                      data-tooltip="Edit"
-                      aria-label="Edit"
-                      type="button"
-                    >
-                      ${icon("edit")}
-                    </button>
-                    <button
-                      class="neutral"
-                      data-act="archive"
-                      data-tooltip="Archive"
-                      aria-label="Archive"
-                      type="button"
-                    >
-                      ${icon("archive")}
-                    </button>
-                  </div>
-                </div>
-              </div>
+              ${restOfRowHtml}
             `;
 
             listEl.appendChild(row);
@@ -2595,6 +2812,7 @@
             endAt,
             createdAt: now,
             notified: false,
+            snoozed: false,
             paused: false,
             originalDuration,
             targetTime,
@@ -2663,6 +2881,7 @@
             t.endAt = computeRestartEndAt(t, now);
             t.createdAt = now;
             t.notified = false;
+            t.snoozed = false;
             t.paused = false;
             delete t.pausedAt;
             delete t.remainingAtPause;
@@ -2678,6 +2897,8 @@
           } else if (act === "edit" && t) {
             editingId = id;
             editDraft = null;
+            snoozingId = null;
+            snoozeDraft = null;
             render();
             focusEditTitle(listEl);
           } else if (act === "cancel-edit") {
@@ -2686,6 +2907,22 @@
             render();
           } else if (act === "save-edit" && t) {
             if (saveEdit(row, t)) {
+              saveToStorage();
+              render();
+            }
+          } else if (act === "snooze" && t) {
+            snoozingId = id;
+            snoozeDraft = null;
+            editingId = null;
+            editDraft = null;
+            render();
+            focusSnoozeValue(listEl);
+          } else if (act === "cancel-snooze") {
+            snoozingId = null;
+            snoozeDraft = null;
+            render();
+          } else if (act === "confirm-snooze" && t) {
+            if (saveSnooze(row, t)) {
               saveToStorage();
               render();
             }
@@ -2698,6 +2935,8 @@
 
         listEl.addEventListener("input", handleEditInput);
         listEl.addEventListener("keydown", handleEditKeydown(render));
+        listEl.addEventListener("input", handleSnoozeInput);
+        listEl.addEventListener("keydown", handleSnoozeKeydown);
 
         // Close any open row-menu popover (see .row-menu in the CSS) when
         // clicking outside of it, matching normal dropdown behavior.
@@ -2742,6 +2981,7 @@
               endAt: computeRestartEndAt(t, now),
               createdAt: now,
               notified: false,
+              snoozed: false,
               paused: false,
               originalDuration: t.originalDuration,
               targetTime: t.targetTime,
@@ -2783,6 +3023,7 @@
               endAt: computeRestartEndAt(t, now),
               createdAt: now,
               notified: false,
+              snoozed: false,
               paused: false,
               originalDuration: t.originalDuration,
               targetTime: t.targetTime,
@@ -2938,7 +3179,12 @@
           // lightweight in-place update
           const rows = [...listEl.children];
           rows.forEach((row) => {
-            if (row.classList.contains("editing")) return;
+            if (
+              row.classList.contains("editing") ||
+              row.classList.contains("snoozing")
+            ) {
+              return;
+            }
 
             const id = Number(row.dataset.id);
             const t = timers.find((x) => x.id === id);
