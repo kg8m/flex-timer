@@ -380,10 +380,10 @@
         transform: rotate(90deg);
       }
 
-      /* Controls column (238px) is wide enough to fit its icon buttons on
-         one line even in the busiest state — a Done timer showing
-         Restart/Snooze/Edit/Archive/Delete: 5 × 36px buttons + 4 × 8px
-         gaps = 212px, + ~26px breathing room.
+      /* Controls column (282px) is wide enough to fit its icon buttons on
+         one line even in the busiest state — a snoozed, still-running
+         Duration timer showing Pause/Restart/Snooze/Edit/Archive/Delete:
+         6 × 36px buttons + 5 × 8px gaps = 256px, + ~26px breathing room.
          Ends At/Remaining (196px = two 94px halves + 8px gap; 94px = 78px
          measured max content for "999:59:59" + 16px breathing room) and
          Status (72px = 64px measured max content for bold "Running" + 8px
@@ -391,7 +391,7 @@
          track) can claim all remaining space. */
       .timer {
         display: grid;
-        grid-template-columns: 1fr 196px 72px 238px;
+        grid-template-columns: 1fr 196px 72px 282px;
         gap: 10px;
         align-items: center;
         border-top: 1px solid var(--border);
@@ -2322,6 +2322,16 @@
             // one-off endAt override.
             const canSnooze = done || (t.snoozed && !t.paused);
 
+            // Restart is normally only offered once a timer is Done (see
+            // pauseResumeBtn below), but a Duration-mode timer's target is
+            // always just "originalDuration from now" — resetting it mid-run
+            // is exactly as well-defined as resetting it after completion,
+            // so offer a second, standalone Restart action for that case.
+            // Time-mode timers are excluded: their target is an absolute
+            // clock time, which Skip already handles for "move to the next
+            // occurrence" and doesn't need a duration-style reset.
+            const canRestart = !done && t.mode === "duration";
+
             let statusText, statusClass;
             if (t.paused) {
               statusText = "Paused";
@@ -2375,6 +2385,20 @@
                       </button>
                     `;
 
+            const restartBtn = canRestart
+              ? html`
+                  <button
+                    class="accent wide-action"
+                    data-act="restart"
+                    data-tooltip="Restart"
+                    aria-label="Restart"
+                    type="button"
+                  >
+                    ${icon("refresh-cw")}
+                  </button>
+                `
+              : "";
+
             const skipBtn =
               !done && !t.paused && t.mode === "time"
                 ? html`
@@ -2422,6 +2446,20 @@
                 `
               : "";
 
+            const restartMenuItem = canRestart
+              ? html`
+                  <button
+                    class="accent"
+                    data-act="restart"
+                    data-tooltip="Restart"
+                    aria-label="Restart"
+                    type="button"
+                  >
+                    ${icon("refresh-cw")}
+                  </button>
+                `
+              : "";
+
             // .when picks up a "snoozed" class from t.snoozed so a snoozed
             // run's Ends At time stays visually distinct even after it
             // reaches Done again — t.snoozed is only cleared by Restart or
@@ -2455,7 +2493,7 @@
                       </span>
                     </div>
                     <div class="controls">
-                      ${pauseResumeBtn} ${snoozeBtn} ${skipBtn}
+                      ${pauseResumeBtn} ${restartBtn} ${snoozeBtn} ${skipBtn}
                       <button
                         class="neutral wide-action"
                         data-act="edit"
@@ -2496,7 +2534,7 @@
                           ${icon("more-vertical")}
                         </button>
                         <div class="row-menu-popover">
-                          ${snoozeMenuItem}
+                          ${restartMenuItem} ${snoozeMenuItem}
                           <button
                             class="neutral"
                             data-act="edit"
