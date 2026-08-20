@@ -1010,6 +1010,36 @@
           flex-basis: 60px;
         }
       }
+
+      /* Between the two layouts above, the Title column was crashing to
+         ~120-210px: the ≤779px layout compresses every column (fixed costs
+         total 226px), but ≥780px jumps straight to the full desktop layout
+         (fixed costs total 550px, driven mostly by Controls' 282px for up
+         to 6 always-visible icon buttons) — a 324px cliff landing right at
+         780px, before Title has caught up. Rather than widen the ≤779px
+         layout's stacked/icon-status/small-font styling into this range
+         (which would look mobile-ish at laptop widths), only borrow its
+         Controls-collapsing behavior here: the same less-frequent actions
+         (Restart/Snooze/Edit/Archive) fold into the "…" menu, shrinking
+         Controls to 140px (124px content — the same "3 always-visible
+         buttons" ceiling as the ≤779px layout: Pause/Resume/Restart-when-
+         Done XOR Skip, plus Delete and the menu toggle, 3 × 36px + 2 × 8px
+         gaps — + 16px breathing room) while every other column, the font
+         size, and the row's non-stacked shape stay at their desktop
+         values. */
+      @media (min-width: 780px) and (max-width: 899px) {
+        .timer {
+          grid-template-columns: 1fr 196px 72px 140px;
+        }
+
+        .controls .wide-action {
+          display: none;
+        }
+
+        .row-menu {
+          display: inline-flex;
+        }
+      }
     </style>
   </head>
 
