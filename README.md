@@ -26,6 +26,6 @@ Just open `index.html` in your browser.
 
 ## Tech
 
-- No dependencies (single HTML file)
+- No dependencies, no build step (plain `index.html` + `style.css` + `app.js`)
 - Vanilla JavaScript
 - Web Audio API
