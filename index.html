@@ -2298,6 +2298,326 @@
 
         const timersTagFilterEl = $("#timers-tag-filter");
 
+        // Builds and patches a single Active-timer row's markup. html() is
+        // used by render() for a full (re)build of a row; patch() is used by
+        // tick()'s lightweight in-place update. Both go through the same
+        // internal view model, so the two never drift out of sync with each
+        // other the way two independently-written functions could.
+        const ActiveRow = (() => {
+          function computeViewModel(t, now) {
+            const remaining = t.paused
+              ? t.remainingAtPause || 0
+              : t.endAt - now;
+            const done = remaining <= 0 && !t.paused;
+
+            // Once Done, offer Snooze. Also keep offering it for the rest
+            // of an already-snoozed run (not just once it's Done again) —
+            // otherwise there's no way to shorten a snooze you regret,
+            // since Edit only ever adjusts originalDuration, not this
+            // one-off endAt override.
+            const canSnooze = done || (t.snoozed && !t.paused);
+
+            // Restart is normally only offered once a timer is Done (see
+            // pauseResumeButton below), but a Duration-mode timer's target is
+            // always just "originalDuration from now" — resetting it
+            // mid-run is exactly as well-defined as resetting it after
+            // completion, so offer a second, standalone Restart action for
+            // that case. Time-mode timers are excluded: their target is an
+            // absolute clock time, which Skip already handles for "move to
+            // the next occurrence" and doesn't need a duration-style reset.
+            const canRestart = !done && t.mode === "duration";
+
+            let statusText, statusClass;
+            if (t.paused) {
+              statusText = "Paused";
+              statusClass = "paused";
+            } else if (done) {
+              statusText = "Done";
+              statusClass = "done";
+            } else if (t.snoozed) {
+              statusText = "Snoozed";
+              statusClass = "snoozed";
+            } else {
+              statusText = "Running";
+              statusClass = "ok";
+            }
+
+            const crossDay = !t.paused && !isSameDay(t.endAt, now);
+
+            return {
+              remaining,
+              done,
+              canSnooze,
+              canRestart,
+              statusText,
+              statusClass,
+              crossDay,
+              paused: t.paused,
+              mode: t.mode,
+            };
+          }
+
+          // Renders a single row-action button from {act, tooltip, icon,
+          // class}, or "" when spec is null (the action doesn't apply to
+          // this timer). extraClass adds a controls-row-only modifier (e.g.
+          // "wide-action") without affecting the same action's
+          // row-menu-popover rendering.
+          function actionButton(spec, extraClass = "") {
+            if (!spec) return "";
+
+            return html`
+              <button
+                class="${spec.class} ${extraClass}"
+                data-act="${spec.act}"
+                data-tooltip="${spec.tooltip}"
+                aria-label="${spec.tooltip}"
+                type="button"
+              >
+                ${icon(spec.icon)}
+              </button>
+            `;
+          }
+
+          // Unlike restartButton/skipButton/snoozeButton below, this slot's
+          // button isn't a single yes/no condition — it's exactly one of
+          // four mutually exclusive states (Done/Paused/Time mode/default).
+          function pauseResumeButton(vm) {
+            if (vm.done) {
+              return actionButton({
+                act: "restart",
+                tooltip: "Restart",
+                icon: "refresh-cw",
+                class: "accent",
+              });
+            } else if (vm.paused) {
+              return actionButton({
+                act: "resume",
+                tooltip: "Resume",
+                icon: "play",
+                class: "accent",
+              });
+            } else if (vm.mode === "time") {
+              return "";
+            } else {
+              return actionButton({
+                act: "pause",
+                tooltip: "Pause",
+                icon: "pause",
+                class: "warn",
+              });
+            }
+          }
+
+          // Called with no extraClass for the row-menu-popover's copy of
+          // this action, and with "wide-action" for the controls-row copy —
+          // same action, just a different layout modifier.
+          function restartButton(vm, extraClass = "") {
+            return vm.canRestart
+              ? actionButton(
+                  {
+                    act: "restart",
+                    tooltip: "Restart",
+                    icon: "refresh-cw",
+                    class: "accent",
+                  },
+                  extraClass,
+                )
+              : "";
+          }
+
+          function skipButton(vm) {
+            return !vm.done && !vm.paused && vm.mode === "time"
+              ? actionButton({
+                  act: "skip",
+                  tooltip: "Skip to next day",
+                  icon: "skip-forward",
+                  class: "accent",
+                })
+              : "";
+          }
+
+          // Only reached when t.id !== snoozingId — see html() below, which
+          // replaces .controls (and everything else after .title) with
+          // snoozeFormHtml() once this row's own form is open, so there's
+          // no redundant trigger sitting next to it. Like restartButton, called
+          // with no extraClass for the row-menu-popover's copy.
+          function snoozeButton(vm, extraClass = "") {
+            return vm.canSnooze
+              ? actionButton(
+                  {
+                    act: "snooze",
+                    tooltip: "Snooze",
+                    icon: "clock-plus",
+                    class: "accent",
+                  },
+                  extraClass,
+                )
+              : "";
+          }
+
+          return {
+            html(t, now) {
+              const vm = computeViewModel(t, now);
+
+              // .when picks up a "snoozed" class from t.snoozed so a
+              // snoozed run's Ends At time stays visually distinct even
+              // after it reaches Done again — t.snoozed is only cleared by
+              // Restart or Edit (see saveEdit), which define a genuinely
+              // new run, deliberately not by tick()'s natural-completion
+              // branch.
+              const restOfRowHtml =
+                t.id === snoozingId
+                  ? snoozeFormHtml(t)
+                  : html`
+                      <div class="when-remain">
+                        <div
+                          class="when ${t.snoozed ? "snoozed" : ""}"
+                          ${vm.crossDay
+                            ? `data-tooltip="${toDateWithWeekday(t.endAt)}" aria-label="${toDateWithWeekday(t.endAt)} — ${toTime(t.endAt)}"`
+                            : ""}
+                        >
+                          ${t.paused ? "--:--:--" : toTime(t.endAt)}
+                        </div>
+                        <div class="remain">
+                          ${humanize(clamp0(vm.remaining))}
+                        </div>
+                      </div>
+                      <div
+                        class="status ${vm.statusClass}"
+                        aria-label="${vm.statusText}"
+                        data-tooltip="${vm.statusText}"
+                      >
+                        <span class="status-icon" aria-hidden="true">
+                          ${statusIconFor(vm.statusText)}
+                        </span>
+                        <span class="status-text" aria-hidden="true">
+                          ${vm.statusText}
+                        </span>
+                      </div>
+                      <div class="controls">
+                        ${pauseResumeButton(vm)}
+                        ${restartButton(vm, "wide-action")}
+                        ${snoozeButton(vm, "wide-action")} ${skipButton(vm)}
+                        <button
+                          class="neutral wide-action"
+                          data-act="edit"
+                          data-tooltip="Edit"
+                          aria-label="Edit"
+                          type="button"
+                        >
+                          ${icon("edit")}
+                        </button>
+                        <button
+                          class="neutral wide-action"
+                          data-act="archive"
+                          data-tooltip="Archive"
+                          aria-label="Archive"
+                          type="button"
+                        >
+                          ${icon("archive")}
+                        </button>
+                        <button
+                          class="danger"
+                          data-act="delete"
+                          data-tooltip="Delete"
+                          aria-label="Delete"
+                          type="button"
+                        >
+                          ${icon("trash")}
+                        </button>
+                        <div class="row-menu">
+                          <button
+                            class="neutral"
+                            data-act="toggle-menu"
+                            data-tooltip="More actions"
+                            aria-label="More actions"
+                            aria-haspopup="true"
+                            aria-expanded="false"
+                            type="button"
+                          >
+                            ${icon("more-vertical")}
+                          </button>
+                          <div class="row-menu-popover">
+                            ${restartButton(vm)} ${snoozeButton(vm)}
+                            <button
+                              class="neutral"
+                              data-act="edit"
+                              data-tooltip="Edit"
+                              aria-label="Edit"
+                              type="button"
+                            >
+                              ${icon("edit")}
+                            </button>
+                            <button
+                              class="neutral"
+                              data-act="archive"
+                              data-tooltip="Archive"
+                              aria-label="Archive"
+                              type="button"
+                            >
+                              ${icon("archive")}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+
+              return html`
+                <div class="title">
+                  <div class="title-main">
+                    ${modeBadge(t)}${t.title
+                      ? escapeHtml(t.title)
+                      : `<span class="when">(${formatFallbackTitle(t)})</span>`}
+                  </div>
+                  ${tagsHtml(t)}
+                </div>
+                ${restOfRowHtml}
+              `;
+            },
+
+            patch(row, t, now) {
+              const remainEl = $(".remain", row);
+              const whenEl = $(".when-remain .when", row);
+              const statusEl = $(".status", row);
+              const statusIconEl = $(".status-icon", statusEl);
+              const statusTextEl = $(".status-text", statusEl);
+
+              const vm = computeViewModel(t, now);
+
+              if (vm.crossDay) {
+                const dateLabel = toDateWithWeekday(t.endAt);
+                whenEl.setAttribute("data-tooltip", dateLabel);
+                whenEl.setAttribute(
+                  "aria-label",
+                  `${dateLabel} — ${toTime(t.endAt)}`,
+                );
+              } else {
+                whenEl.removeAttribute("data-tooltip");
+                whenEl.removeAttribute("aria-label");
+              }
+
+              function setStatus(text, statusClass) {
+                statusEl.setAttribute("aria-label", text);
+                statusEl.setAttribute("data-tooltip", text);
+                statusIconEl.innerHTML = statusIconFor(text);
+                statusTextEl.textContent = text;
+                statusEl.classList.remove("ok", "paused", "done", "snoozed");
+                statusEl.classList.add(statusClass);
+              }
+
+              if (t.paused) {
+                setStatus(vm.statusText, vm.statusClass);
+                remainEl.textContent = humanize(clamp0(vm.remaining));
+              } else if (vm.done) {
+                setStatus(vm.statusText, vm.statusClass);
+                remainEl.textContent = humanize(0);
+              } else {
+                remainEl.textContent = humanize(vm.remaining);
+              }
+            },
+          };
+        })();
+
         function render() {
           renderTagFilterChips(
             timersTagFilterEl,
@@ -2335,270 +2655,7 @@
             }
 
             row.className = t.id === snoozingId ? "timer snoozing" : "timer";
-
-            const now = Date.now();
-            let remaining;
-            if (t.paused) {
-              remaining = t.remainingAtPause || 0;
-            } else {
-              remaining = t.endAt - now;
-            }
-            const done = remaining <= 0 && !t.paused;
-
-            // Once Done, offer Snooze. Also keep offering it for the rest
-            // of an already-snoozed run (not just once it's Done again) —
-            // otherwise there's no way to shorten a snooze you regret,
-            // since Edit only ever adjusts originalDuration, not this
-            // one-off endAt override.
-            const canSnooze = done || (t.snoozed && !t.paused);
-
-            // Restart is normally only offered once a timer is Done (see
-            // pauseResumeBtn below), but a Duration-mode timer's target is
-            // always just "originalDuration from now" — resetting it mid-run
-            // is exactly as well-defined as resetting it after completion,
-            // so offer a second, standalone Restart action for that case.
-            // Time-mode timers are excluded: their target is an absolute
-            // clock time, which Skip already handles for "move to the next
-            // occurrence" and doesn't need a duration-style reset.
-            const canRestart = !done && t.mode === "duration";
-
-            let statusText, statusClass;
-            if (t.paused) {
-              statusText = "Paused";
-              statusClass = "paused";
-            } else if (done) {
-              statusText = "Done";
-              statusClass = "done";
-            } else if (t.snoozed) {
-              statusText = "Snoozed";
-              statusClass = "snoozed";
-            } else {
-              statusText = "Running";
-              statusClass = "ok";
-            }
-
-            const pauseResumeBtn = done
-              ? html`
-                  <button
-                    class="accent"
-                    data-act="restart"
-                    data-tooltip="Restart"
-                    aria-label="Restart"
-                    type="button"
-                  >
-                    ${icon("refresh-cw")}
-                  </button>
-                `
-              : t.paused
-                ? html`
-                    <button
-                      class="accent"
-                      data-act="resume"
-                      data-tooltip="Resume"
-                      aria-label="Resume"
-                      type="button"
-                    >
-                      ${icon("play")}
-                    </button>
-                  `
-                : t.mode === "time"
-                  ? ""
-                  : html`
-                      <button
-                        class="warn"
-                        data-act="pause"
-                        data-tooltip="Pause"
-                        aria-label="Pause"
-                        type="button"
-                      >
-                        ${icon("pause")}
-                      </button>
-                    `;
-
-            const restartBtn = canRestart
-              ? html`
-                  <button
-                    class="accent wide-action"
-                    data-act="restart"
-                    data-tooltip="Restart"
-                    aria-label="Restart"
-                    type="button"
-                  >
-                    ${icon("refresh-cw")}
-                  </button>
-                `
-              : "";
-
-            const skipBtn =
-              !done && !t.paused && t.mode === "time"
-                ? html`
-                    <button
-                      class="accent"
-                      data-act="skip"
-                      data-tooltip="Skip to next day"
-                      aria-label="Skip to next day"
-                      type="button"
-                    >
-                      ${icon("skip-forward")}
-                    </button>
-                  `
-                : "";
-
-            // Only reached when t.id !== snoozingId — see restOfRowHtml
-            // below, which replaces .controls (and everything else after
-            // .title) with snoozeFormHtml() once this row's own form is
-            // open, so there's no redundant trigger sitting next to it.
-            const snoozeBtn = canSnooze
-              ? html`
-                  <button
-                    class="accent wide-action"
-                    data-act="snooze"
-                    data-tooltip="Snooze"
-                    aria-label="Snooze"
-                    type="button"
-                  >
-                    ${icon("clock-plus")}
-                  </button>
-                `
-              : "";
-
-            const snoozeMenuItem = canSnooze
-              ? html`
-                  <button
-                    class="accent"
-                    data-act="snooze"
-                    data-tooltip="Snooze"
-                    aria-label="Snooze"
-                    type="button"
-                  >
-                    ${icon("clock-plus")}
-                  </button>
-                `
-              : "";
-
-            const restartMenuItem = canRestart
-              ? html`
-                  <button
-                    class="accent"
-                    data-act="restart"
-                    data-tooltip="Restart"
-                    aria-label="Restart"
-                    type="button"
-                  >
-                    ${icon("refresh-cw")}
-                  </button>
-                `
-              : "";
-
-            // .when picks up a "snoozed" class from t.snoozed so a snoozed
-            // run's Ends At time stays visually distinct even after it
-            // reaches Done again — t.snoozed is only cleared by Restart or
-            // Edit (see saveEdit), which define a genuinely new run,
-            // deliberately not by tick()'s natural-completion branch.
-            const restOfRowHtml =
-              t.id === snoozingId
-                ? snoozeFormHtml(t)
-                : html`
-                    <div class="when-remain">
-                      <div
-                        class="when ${t.snoozed ? "snoozed" : ""}"
-                        ${!t.paused && !isSameDay(t.endAt, now)
-                          ? `data-tooltip="${toDateWithWeekday(t.endAt)}" aria-label="${toDateWithWeekday(t.endAt)} — ${toTime(t.endAt)}"`
-                          : ""}
-                      >
-                        ${t.paused ? "--:--:--" : toTime(t.endAt)}
-                      </div>
-                      <div class="remain">${humanize(clamp0(remaining))}</div>
-                    </div>
-                    <div
-                      class="status ${statusClass}"
-                      aria-label="${statusText}"
-                      data-tooltip="${statusText}"
-                    >
-                      <span class="status-icon" aria-hidden="true">
-                        ${statusIconFor(statusText)}
-                      </span>
-                      <span class="status-text" aria-hidden="true">
-                        ${statusText}
-                      </span>
-                    </div>
-                    <div class="controls">
-                      ${pauseResumeBtn} ${restartBtn} ${snoozeBtn} ${skipBtn}
-                      <button
-                        class="neutral wide-action"
-                        data-act="edit"
-                        data-tooltip="Edit"
-                        aria-label="Edit"
-                        type="button"
-                      >
-                        ${icon("edit")}
-                      </button>
-                      <button
-                        class="neutral wide-action"
-                        data-act="archive"
-                        data-tooltip="Archive"
-                        aria-label="Archive"
-                        type="button"
-                      >
-                        ${icon("archive")}
-                      </button>
-                      <button
-                        class="danger"
-                        data-act="delete"
-                        data-tooltip="Delete"
-                        aria-label="Delete"
-                        type="button"
-                      >
-                        ${icon("trash")}
-                      </button>
-                      <div class="row-menu">
-                        <button
-                          class="neutral"
-                          data-act="toggle-menu"
-                          data-tooltip="More actions"
-                          aria-label="More actions"
-                          aria-haspopup="true"
-                          aria-expanded="false"
-                          type="button"
-                        >
-                          ${icon("more-vertical")}
-                        </button>
-                        <div class="row-menu-popover">
-                          ${restartMenuItem} ${snoozeMenuItem}
-                          <button
-                            class="neutral"
-                            data-act="edit"
-                            data-tooltip="Edit"
-                            aria-label="Edit"
-                            type="button"
-                          >
-                            ${icon("edit")}
-                          </button>
-                          <button
-                            class="neutral"
-                            data-act="archive"
-                            data-tooltip="Archive"
-                            aria-label="Archive"
-                            type="button"
-                          >
-                            ${icon("archive")}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  `;
-
-            row.innerHTML = html`
-              <div class="title">
-                <div class="title-main">
-                  ${modeBadge(t)}${t.title
-                    ? escapeHtml(t.title)
-                    : `<span class="when">(${formatFallbackTitle(t)})</span>`}
-                </div>
-                ${tagsHtml(t)}
-              </div>
-              ${restOfRowHtml}
-            `;
+            row.innerHTML = ActiveRow.html(t, Date.now());
 
             listEl.appendChild(row);
           }
@@ -2608,6 +2665,47 @@
         const trashEmptyEl = $("#trash-empty");
         const trashHeaderEl = $("#trash-header");
         const trashTagFilterEl = $("#trash-tag-filter");
+
+        // Builds a single Trash row's markup, and patches its purge
+        // countdown in tick()'s lightweight update — both share the same
+        // purgesIn() so they can't drift apart.
+        const TrashRow = (() => {
+          function purgesIn(t, now) {
+            return clamp0(TRASH_RETENTION_MS - (now - t.deletedAt));
+          }
+
+          return {
+            html(t, now) {
+              return html`
+                <div class="title">
+                  <div class="title-main">
+                    ${modeBadge(t)}${t.title
+                      ? escapeHtml(t.title)
+                      : `<span class="when">(${formatFallbackTitle(t)})</span>`}
+                  </div>
+                  ${tagsHtml(t)}
+                </div>
+                <div class="set">${formatTimerLabel(t)}</div>
+                <div class="remain">${humanize(purgesIn(t, now))}</div>
+                <div class="controls">
+                  <button
+                    class="accent"
+                    data-act="restore"
+                    data-tooltip="Restore"
+                    aria-label="Restore"
+                    type="button"
+                  >
+                    ${icon("corner-up-left")}
+                  </button>
+                </div>
+              `;
+            },
+
+            patch(row, t, now) {
+              $(".remain", row).textContent = humanize(purgesIn(t, now));
+            },
+          };
+        })();
 
         function renderTrash() {
           renderTagFilterChips(
@@ -2634,32 +2732,7 @@
             const row = document.createElement("div");
             row.className = "timer trash-row";
             row.dataset.id = String(t.id);
-
-            const purgesIn = clamp0(TRASH_RETENTION_MS - (now - t.deletedAt));
-
-            row.innerHTML = html`
-              <div class="title">
-                <div class="title-main">
-                  ${modeBadge(t)}${t.title
-                    ? escapeHtml(t.title)
-                    : `<span class="when">(${formatFallbackTitle(t)})</span>`}
-                </div>
-                ${tagsHtml(t)}
-              </div>
-              <div class="set">${formatTimerLabel(t)}</div>
-              <div class="remain">${humanize(purgesIn)}</div>
-              <div class="controls">
-                <button
-                  class="accent"
-                  data-act="restore"
-                  data-tooltip="Restore"
-                  aria-label="Restore"
-                  type="button"
-                >
-                  ${icon("corner-up-left")}
-                </button>
-              </div>
-            `;
+            row.innerHTML = TrashRow.html(t, now);
 
             trashListEl.appendChild(row);
           }
@@ -2690,40 +2763,13 @@
         const archiveHeaderEl = $("#archive-header");
         const archiveTagFilterEl = $("#archive-tag-filter");
 
-        function renderArchived() {
-          renderTagFilterChips(
-            archiveTagFilterEl,
-            archived,
-            archiveTagFilter,
-            archiveTagFilterExpanded,
-          );
-
-          // most recently archived first
-          const sorted = [...archived]
-            .filter((t) => matchesTagFilter(t, archiveTagFilter))
-            .sort((a, b) => b.archivedAt - a.archivedAt);
-
-          archiveEmptyEl.style.display = sorted.length ? "none" : "";
-          archiveEmptyEl.textContent = archived.length
-            ? "No archived timers match the selected tags."
-            : "No archived timers.";
-          archiveHeaderEl.style.display = sorted.length ? "" : "none";
-          archiveListEl.innerHTML = "";
-
-          for (const t of sorted) {
-            const row = document.createElement("div");
-            row.dataset.id = String(t.id);
-
-            if (t.id === editingId) {
-              row.className = "timer archive-row editing";
-              row.innerHTML = editRowHtml(t);
-              archiveListEl.appendChild(row);
-              continue;
-            }
-
-            row.className = "timer archive-row";
-
-            row.innerHTML = html`
+        // Builds a single Archived row's markup. Archived rows have no live
+        // countdown, so unlike ActiveRow/TrashRow there's no tick()-side
+        // patch step — render() rebuilding on any structural change is
+        // enough.
+        const ArchivedRow = {
+          html(t) {
+            return html`
               <div class="title">
                 <div class="title-main">
                   ${modeBadge(t)}${t.title
@@ -2766,6 +2812,42 @@
                 </button>
               </div>
             `;
+          },
+        };
+
+        function renderArchived() {
+          renderTagFilterChips(
+            archiveTagFilterEl,
+            archived,
+            archiveTagFilter,
+            archiveTagFilterExpanded,
+          );
+
+          // most recently archived first
+          const sorted = [...archived]
+            .filter((t) => matchesTagFilter(t, archiveTagFilter))
+            .sort((a, b) => b.archivedAt - a.archivedAt);
+
+          archiveEmptyEl.style.display = sorted.length ? "none" : "";
+          archiveEmptyEl.textContent = archived.length
+            ? "No archived timers match the selected tags."
+            : "No archived timers.";
+          archiveHeaderEl.style.display = sorted.length ? "" : "none";
+          archiveListEl.innerHTML = "";
+
+          for (const t of sorted) {
+            const row = document.createElement("div");
+            row.dataset.id = String(t.id);
+
+            if (t.id === editingId) {
+              row.className = "timer archive-row editing";
+              row.innerHTML = editRowHtml(t);
+              archiveListEl.appendChild(row);
+              continue;
+            }
+
+            row.className = "timer archive-row";
+            row.innerHTML = ArchivedRow.html(t);
 
             archiveListEl.appendChild(row);
           }
@@ -2930,10 +3012,10 @@
             return;
           }
 
-          const btn = e.target.closest("button");
-          if (!btn) return;
-          const act = btn.getAttribute("data-act");
-          const row = btn.closest(".timer");
+          const button = e.target.closest("button");
+          if (!button) return;
+          const act = button.getAttribute("data-act");
+          const row = button.closest(".timer");
           const id = Number(row?.dataset.id);
           const t = timers.find((x) => x.id === id);
 
@@ -3023,9 +3105,9 @@
               render();
             }
           } else if (act === "toggle-menu") {
-            const menu = btn.closest(".row-menu");
+            const menu = button.closest(".row-menu");
             const isOpen = menu?.classList.toggle("open");
-            btn.setAttribute("aria-expanded", String(!!isOpen));
+            button.setAttribute("aria-expanded", String(!!isOpen));
           }
         });
 
@@ -3057,10 +3139,10 @@
             return;
           }
 
-          const btn = e.target.closest("button");
-          if (!btn) return;
-          const act = btn.getAttribute("data-act");
-          const row = btn.closest(".timer");
+          const button = e.target.closest("button");
+          if (!button) return;
+          const act = button.getAttribute("data-act");
+          const row = button.closest(".timer");
           const id = Number(row?.dataset.id);
           const idx = trash.findIndex((x) => x.id === id);
           if (idx === -1) return;
@@ -3099,10 +3181,10 @@
             return;
           }
 
-          const btn = e.target.closest("button");
-          if (!btn) return;
-          const act = btn.getAttribute("data-act");
-          const row = btn.closest(".timer");
+          const button = e.target.closest("button");
+          if (!button) return;
+          const act = button.getAttribute("data-act");
+          const row = button.closest(".timer");
           const id = Number(row?.dataset.id);
           const idx = archived.findIndex((x) => x.id === id);
           if (idx === -1) return;
@@ -3160,15 +3242,15 @@
         // Tag filter chip bars (select/deselect a tag, clear the filter, or
         // expand/collapse the chip bar via toggleExpanded)
         function handleTagFilterClick(e, filterSet, rerender, toggleExpanded) {
-          const btn = e.target.closest("button");
-          if (!btn) return;
+          const button = e.target.closest("button");
+          if (!button) return;
 
-          if (btn.classList.contains("tag-filter-toggle")) {
+          if (button.classList.contains("tag-filter-toggle")) {
             toggleExpanded();
-          } else if (btn.classList.contains("tag-filter-clear")) {
+          } else if (button.classList.contains("tag-filter-clear")) {
             filterSet.clear();
           } else {
-            toggleTagInFilter(filterSet, btn.dataset.tag);
+            toggleTagInFilter(filterSet, button.dataset.tag);
           }
 
           rerender();
@@ -3267,9 +3349,7 @@
             const t = trash.find((x) => x.id === id);
             if (!t) return;
 
-            const remainEl = $(".remain", row);
-            const purgesIn = clamp0(TRASH_RETENTION_MS - (now - t.deletedAt));
-            remainEl.textContent = humanize(purgesIn);
+            TrashRow.patch(row, t, now);
           });
 
           // lightweight in-place update
@@ -3286,49 +3366,7 @@
             const t = timers.find((x) => x.id === id);
             if (!t) return;
 
-            const remainEl = $(".remain", row);
-            const whenEl = $(".when-remain .when", row);
-            const statusEl = $(".status", row);
-            const statusIconEl = $(".status-icon", statusEl);
-            const statusTextEl = $(".status-text", statusEl);
-
-            if (!t.paused && !isSameDay(t.endAt, now)) {
-              const dateLabel = toDateWithWeekday(t.endAt);
-              whenEl.setAttribute("data-tooltip", dateLabel);
-              whenEl.setAttribute(
-                "aria-label",
-                `${dateLabel} — ${toTime(t.endAt)}`,
-              );
-            } else {
-              whenEl.removeAttribute("data-tooltip");
-              whenEl.removeAttribute("aria-label");
-            }
-
-            let remaining;
-            if (t.paused) {
-              remaining = t.remainingAtPause || 0;
-            } else {
-              remaining = t.endAt - now;
-            }
-
-            function setStatus(text, statusClass) {
-              statusEl.setAttribute("aria-label", text);
-              statusEl.setAttribute("data-tooltip", text);
-              statusIconEl.innerHTML = statusIconFor(text);
-              statusTextEl.textContent = text;
-              statusEl.classList.remove("ok", "paused", "done", "snoozed");
-              statusEl.classList.add(statusClass);
-            }
-
-            if (t.paused) {
-              setStatus("Paused", "paused");
-              remainEl.textContent = humanize(clamp0(remaining));
-            } else if (remaining <= 0) {
-              setStatus("Done", "done");
-              remainEl.textContent = humanize(0);
-            } else {
-              remainEl.textContent = humanize(remaining);
-            }
+            ActiveRow.patch(row, t, now);
           });
 
           scheduleTick();
