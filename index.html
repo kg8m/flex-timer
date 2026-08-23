@@ -3210,8 +3210,8 @@
           };
         }
 
-        function restoreFromTrash(idx) {
-          const [t] = trash.splice(idx, 1);
+        function restoreFromTrash(t) {
+          trash = trash.filter((x) => x.id !== t.id);
           timers.push(reviveTimer(t, Date.now()));
           Storage.save();
           renderActive();
@@ -3232,24 +3232,24 @@
           const act = button.getAttribute("data-act");
           const row = button.closest(".timer");
           const id = Number(row?.dataset.id);
-          const idx = trash.findIndex((x) => x.id === id);
-          if (idx === -1) return;
+          const t = trash.find((x) => x.id === id);
+          if (!t) return;
 
           if (act === "restore") {
-            restoreFromTrash(idx);
+            restoreFromTrash(t);
           }
         });
 
-        function restartFromArchive(idx, t) {
-          archived.splice(idx, 1);
+        function restartFromArchive(t) {
+          archived = archived.filter((x) => x.id !== t.id);
           timers.push(reviveTimer(t, Date.now()));
           Storage.save();
           renderActive();
           renderArchived();
         }
 
-        function deleteFromArchive(idx, t) {
-          archived.splice(idx, 1);
+        function deleteFromArchive(t) {
+          archived = archived.filter((x) => x.id !== t.id);
           moveToTrash(t);
           Storage.save();
           renderArchived();
@@ -3290,14 +3290,13 @@
           const act = button.getAttribute("data-act");
           const row = button.closest(".timer");
           const id = Number(row?.dataset.id);
-          const idx = archived.findIndex((x) => x.id === id);
-          if (idx === -1) return;
-          const t = archived[idx];
+          const t = archived.find((x) => x.id === id);
+          if (!t) return;
 
           if (act === "restart") {
-            restartFromArchive(idx, t);
+            restartFromArchive(t);
           } else if (act === "delete") {
-            deleteFromArchive(idx, t);
+            deleteFromArchive(t);
           } else if (act === "edit") {
             startEditArchive(id);
           } else if (act === "cancel-edit") {
