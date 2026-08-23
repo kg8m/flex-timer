@@ -1267,50 +1267,56 @@
         const TRASH_RETENTION_MS = 5 * 60 * 1000;
 
         /*** LocalStorage ***/
-        const STORAGE_KEY = "flex-timer-data";
-        // TODO: Rename migration from the simple-timer era. Safe to remove around 2027.
-        const LEGACY_STORAGE_KEY = "simple-timer-data";
+        // Persists {seq, timers, trash, archived} as one JSON blob.
+        // migrateLegacyStorage is a load()-only internal step, not exposed.
+        const Storage = (() => {
+          const STORAGE_KEY = "flex-timer-data";
+          // TODO: Rename migration from the simple-timer era. Safe to remove around 2027.
+          const LEGACY_STORAGE_KEY = "simple-timer-data";
 
-        function migrateLegacyStorage() {
-          if (localStorage.getItem(STORAGE_KEY) !== null) return;
-          const legacyData = localStorage.getItem(LEGACY_STORAGE_KEY);
-          if (legacyData === null) return;
-          localStorage.setItem(STORAGE_KEY, legacyData);
-          localStorage.removeItem(LEGACY_STORAGE_KEY);
-        }
-
-        function saveToStorage() {
-          try {
-            localStorage.setItem(
-              STORAGE_KEY,
-              JSON.stringify({ seq, timers, trash, archived }),
-            );
-          } catch (e) {
-            console.warn("Failed to save to localStorage:", e);
+          function migrateLegacyStorage() {
+            if (localStorage.getItem(STORAGE_KEY) !== null) return;
+            const legacyData = localStorage.getItem(LEGACY_STORAGE_KEY);
+            if (legacyData === null) return;
+            localStorage.setItem(STORAGE_KEY, legacyData);
+            localStorage.removeItem(LEGACY_STORAGE_KEY);
           }
-        }
 
-        function loadFromStorage() {
-          try {
-            migrateLegacyStorage();
-            const data = localStorage.getItem(STORAGE_KEY);
-            if (data) {
-              const parsed = JSON.parse(data);
-              seq = parsed.seq || 1;
-              timers = parsed.timers || [];
-              trash = parsed.trash || [];
-              archived = parsed.archived || [];
-
-              for (const t of [...timers, ...trash, ...archived]) {
-                if (!Array.isArray(t.tags)) t.tags = [];
+          return {
+            save() {
+              try {
+                localStorage.setItem(
+                  STORAGE_KEY,
+                  JSON.stringify({ seq, timers, trash, archived }),
+                );
+              } catch (e) {
+                console.warn("Failed to save to localStorage:", e);
               }
-            }
-          } catch (e) {
-            console.warn("Failed to load from localStorage:", e);
-          }
-        }
+            },
 
-        loadFromStorage();
+            load() {
+              try {
+                migrateLegacyStorage();
+                const data = localStorage.getItem(STORAGE_KEY);
+                if (data) {
+                  const parsed = JSON.parse(data);
+                  seq = parsed.seq || 1;
+                  timers = parsed.timers || [];
+                  trash = parsed.trash || [];
+                  archived = parsed.archived || [];
+
+                  for (const t of [...timers, ...trash, ...archived]) {
+                    if (!Array.isArray(t.tags)) t.tags = [];
+                  }
+                }
+              } catch (e) {
+                console.warn("Failed to load from localStorage:", e);
+              }
+            },
+          };
+        })();
+
+        Storage.load();
 
         /*** Utilities ***/
         const html = (strings, ...values) => {
@@ -2208,7 +2214,7 @@
                 archived.find((x) => x.id === id);
 
               if (t && saveEdit(row, t)) {
-                saveToStorage();
+                Storage.save();
                 renderFn();
               }
             }
@@ -2278,7 +2284,7 @@
             const t = timers.find((x) => x.id === id);
 
             if (t && saveSnooze(row, t)) {
-              saveToStorage();
+              Storage.save();
               renderActive();
             }
           }
@@ -2999,7 +3005,7 @@
           $("#mode-duration").checked = true;
           updateModeFieldsVisibility();
 
-          saveToStorage();
+          Storage.save();
           renderActive();
 
           $("#title").focus();
@@ -3024,13 +3030,13 @@
           if (act === "delete" && t) {
             timers = timers.filter((x) => x.id !== id);
             moveToTrash(t);
-            saveToStorage();
+            Storage.save();
             renderActive();
             renderTrash();
           } else if (act === "archive" && t) {
             timers = timers.filter((x) => x.id !== id);
             moveToArchive(t);
-            saveToStorage();
+            Storage.save();
             renderActive();
             renderArchived();
           } else if (act === "pause" && t && !t.paused) {
@@ -3038,7 +3044,7 @@
             t.paused = true;
             t.pausedAt = now;
             t.remainingAtPause = t.endAt - now;
-            saveToStorage();
+            Storage.save();
             renderActive();
           } else if (act === "resume" && t && t.paused) {
             const now = Date.now();
@@ -3047,7 +3053,7 @@
             t.notified = false;
             delete t.pausedAt;
             delete t.remainingAtPause;
-            saveToStorage();
+            Storage.save();
             renderActive();
           } else if (act === "restart" && t) {
             const now = Date.now();
@@ -3058,7 +3064,7 @@
             t.paused = false;
             delete t.pausedAt;
             delete t.remainingAtPause;
-            saveToStorage();
+            Storage.save();
             renderActive();
           } else if (act === "skip" && t && t.mode === "time") {
             // While snoozed, t.endAt holds the snooze re-fire time rather
@@ -3072,7 +3078,7 @@
               t.daysOfWeek,
             );
             t.snoozed = false;
-            saveToStorage();
+            Storage.save();
             renderActive();
           } else if (act === "edit" && t) {
             editingId = id;
@@ -3087,7 +3093,7 @@
             renderActive();
           } else if (act === "save-edit" && t) {
             if (saveEdit(row, t)) {
-              saveToStorage();
+              Storage.save();
               renderActive();
             }
           } else if (act === "snooze" && t) {
@@ -3103,7 +3109,7 @@
             renderActive();
           } else if (act === "confirm-snooze" && t) {
             if (saveSnooze(row, t)) {
-              saveToStorage();
+              Storage.save();
               renderActive();
             }
           } else if (act === "toggle-menu") {
@@ -3168,7 +3174,7 @@
               daysOfWeek: t.daysOfWeek,
             });
 
-            saveToStorage();
+            Storage.save();
             renderActive();
             renderTrash();
           }
@@ -3209,13 +3215,13 @@
               targetTime: t.targetTime,
               daysOfWeek: t.daysOfWeek,
             });
-            saveToStorage();
+            Storage.save();
             renderActive();
             renderArchived();
           } else if (act === "delete") {
             archived.splice(idx, 1);
             moveToTrash(t);
-            saveToStorage();
+            Storage.save();
             renderArchived();
             renderTrash();
           } else if (act === "edit") {
@@ -3229,7 +3235,7 @@
             renderArchived();
           } else if (act === "save-edit") {
             if (saveEdit(row, t)) {
-              saveToStorage();
+              Storage.save();
               renderArchived();
             }
           }
@@ -3282,7 +3288,7 @@
               moveToTrash(t);
             }
             timers = [];
-            saveToStorage();
+            Storage.save();
             renderActive();
             renderTrash();
           }
@@ -3337,7 +3343,7 @@
           const purged = purgeExpiredTrashItems();
 
           if (changed || purged) {
-            saveToStorage();
+            Storage.save();
             renderActive();
             renderTrash();
             scheduleTick();
@@ -3375,7 +3381,7 @@
         }
 
         if (purgeExpiredTrashItems()) {
-          saveToStorage();
+          Storage.save();
         }
         renderActive();
         renderTrash();
