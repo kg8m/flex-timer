@@ -3129,6 +3129,16 @@
             const isOpen = menu?.classList.toggle("open");
             button.setAttribute("aria-expanded", String(!!isOpen));
           },
+
+          deleteAll() {
+            for (const t of timers) {
+              moveToTrash(t);
+            }
+            timers = [];
+            Storage.save();
+            renderActive();
+            renderTrash();
+          },
         };
 
         // Timer controls (pause/resume/restart/delete)
@@ -3362,13 +3372,7 @@
         $("#clear-all").addEventListener("click", () => {
           if (timers.length === 0) return;
           if (confirm("Are you sure you want to delete all timers?")) {
-            for (const t of timers) {
-              moveToTrash(t);
-            }
-            timers = [];
-            Storage.save();
-            renderActive();
-            renderTrash();
+            ActiveActions.deleteAll();
           }
         });
 
