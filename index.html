@@ -1974,310 +1974,13 @@
           };
         })();
 
-        // Inline edit form shown in place of a row's normal content. Shared
-        // by the Timers and Archived lists: both item shapes carry the same
-        // title/tags/mode/originalDuration/targetTime/daysOfWeek fields.
-        function editRowHtml(t) {
-          const draft = editDraft || {
-            title: composeTitleWithTags(t),
-            value:
-              t.mode === "time"
-                ? t.targetTime
-                : durationToEditableString(t.originalDuration),
-            daysOfWeek: t.daysOfWeek,
-          };
-
-          const valueField =
-            t.mode === "time"
-              ? html`
-                  <input
-                    type="time"
-                    step="1"
-                    class="edit-value"
-                    aria-label="At time"
-                    value="${escapeHtml(draft.value || "")}"
-                  />
-                `
-              : html`
-                  <input
-                    type="text"
-                    inputmode="numeric"
-                    class="edit-value"
-                    aria-label="Duration"
-                    placeholder="5:00 / 5 / 1h / 30s / 2d"
-                    value="${escapeHtml(draft.value || "")}"
-                  />
-                `;
-
-          // On its own second line (after title/value/controls) so the
-          // first line stays identical in shape to the Duration mode edit
-          // row instead of pushing Save/Cancel down to a third line.
-          const weekdayField =
-            t.mode === "time"
-              ? html`
-                  <div
-                    class="weekday-toggle-row"
-                    role="group"
-                    aria-label="Days of week (optional; none = every day)"
-                  >
-                    ${WEEKDAY_DISPLAY_ORDER.map(
-                      (day) => html`
-                        <input
-                          type="checkbox"
-                          id="edit-day-${t.id}-${day}"
-                          data-day="${day}"
-                          ${draft.daysOfWeek?.includes(day) ? "checked" : ""}
-                        />
-                        <label for="edit-day-${t.id}-${day}">
-                          ${WEEKDAY_LABELS[day]}
-                        </label>
-                      `,
-                    ).join("")}
-                  </div>
-                `
-              : "";
-
-          return html`
-            <div class="edit-row">
-              <input
-                type="text"
-                class="edit-title"
-                aria-label="Title"
-                placeholder="e.g., Tea #break / Meeting #work"
-                value="${escapeHtml(draft.title || "")}"
-              />
-              ${valueField}
-              <div class="controls">
-                <button
-                  class="accent"
-                  data-act="save-edit"
-                  data-tooltip="Save"
-                  aria-label="Save"
-                  type="button"
-                >
-                  ${icon("check")}
-                </button>
-                <button
-                  class="neutral"
-                  data-act="cancel-edit"
-                  data-tooltip="Cancel"
-                  aria-label="Cancel"
-                  type="button"
-                >
-                  ${icon("x")}
-                </button>
-              </div>
-              ${weekdayField}
-            </div>
-          `;
-        }
-
-        // Apply an edit form's current input values to `t` (a timer or
-        // archived item — both share the same fields). Returns false
-        // (leaving the edit form open) if the value field failed to parse.
-        // Archived items have no endAt/paused/notified, so those updates
-        // are skipped via the `"endAt" in t` guard, letting active timers
-        // and archived items share this one function.
-        function applyEditFields(row, t) {
-          const titleInput = $(".edit-title", row);
-          const valueInput = $(".edit-value", row);
-          const { title, tags } = extractTagsFromTitle(titleInput.value);
-          const now = Date.now();
-
-          if (t.mode === "time") {
-            const targetTime = valueInput.value;
-            const daysOfWeek = readDaysOfWeek(row);
-            const endAt = computeNextTimeBasedEndAt(
-              targetTime,
-              now,
-              daysOfWeek,
-            );
-
-            if (!targetTime || endAt == null) {
-              alert("Enter a valid time (HH:MM or HH:MM:SS).");
-              return false;
-            }
-
-            t.targetTime = targetTime;
-            t.daysOfWeek = daysOfWeek;
-            if ("endAt" in t) {
-              t.endAt = endAt;
-              t.notified = false;
-              t.snoozed = false;
-            }
-          } else {
-            const dur = parseDuration(valueInput.value);
-
-            if (!dur || dur <= 0) {
-              alert("Enter duration as mm:ss or minutes (number).");
-              return false;
-            }
-
-            // Preserve elapsed time: shift endAt/remainingAtPause by exactly
-            // the change in total duration, rather than restarting the
-            // countdown from now.
-            const delta = dur - t.originalDuration;
-            t.originalDuration = dur;
-            if ("endAt" in t) {
-              if (t.paused) {
-                t.remainingAtPause = clamp0((t.remainingAtPause || 0) + delta);
-              } else {
-                t.endAt += delta;
-              }
-              t.notified = false;
-              t.snoozed = false;
-            }
-          }
-
-          t.title = title;
-          t.tags = tags;
-
-          editingId = null;
-          editDraft = null;
-          return true;
-        }
-
-        // Inline "extend by" form shown in place of a Done timer's Ends
-        // At/Remaining/Status/Controls — the title (unlike
-        // editRowHtml, which replaces the whole row including the title)
-        // stays put. Only offered for active timers, so unlike editRowHtml
-        // this doesn't need to handle the archived-item shape.
-        function snoozeFormHtml(t) {
-          const draft = snoozeDraft || { value: "5" };
-
-          return html`
-            <div class="edit-row snooze-row">
-              <span class="snooze-label snooze-label-wide">Snooze for</span>
-              <span class="snooze-label snooze-label-narrow">Snooze:</span>
-              <input
-                type="text"
-                inputmode="numeric"
-                class="snooze-value"
-                aria-label="Snooze duration (mm:ss or minutes)"
-                placeholder="5:00 / 5 / 1h / 30s"
-                value="${escapeHtml(draft.value)}"
-              />
-              <div class="controls">
-                <button
-                  class="accent"
-                  data-act="confirm-snooze"
-                  data-tooltip="Snooze"
-                  aria-label="Snooze"
-                  type="button"
-                >
-                  ${icon("check")}
-                </button>
-                <button
-                  class="neutral"
-                  data-act="cancel-snooze"
-                  data-tooltip="Cancel"
-                  aria-label="Cancel"
-                  type="button"
-                >
-                  ${icon("x")}
-                </button>
-              </div>
-            </div>
-          `;
-        }
-
-        // Apply a snooze form's current input value to `t`. Returns false
-        // (leaving the form open) if the value doesn't parse to a positive
-        // duration — same mm:ss / minutes / 1h / 30s / 2d format as the
-        // Duration mode field, via parseDuration(). Deliberately doesn't
-        // touch originalDuration/targetTime, so a later Restart still uses
-        // the timer's original setting rather than the snoozed length.
-        function saveSnooze(row, t) {
-          const valueInput = $(".snooze-value", row);
-          const dur = parseDuration(valueInput.value);
-
-          if (!dur || dur <= 0) {
-            alert("Enter snooze duration as mm:ss or minutes (number).");
-            return false;
-          }
-
-          t.endAt = alignEndAtToSecond(Date.now() + dur);
-          t.notified = false;
-          t.snoozed = true;
-
-          snoozingId = null;
-          snoozeDraft = null;
-          return true;
-        }
-
-        function focusSnoozeValue(containerEl) {
-          const input = $(".snoozing .snooze-value", containerEl);
-          if (input) {
-            input.focus();
-            input.select();
-          }
-        }
-
-        function focusEditTitle(containerEl) {
-          const input = $(".editing .edit-title", containerEl);
-          if (input) {
-            input.focus();
-            input.select();
-          }
-        }
-
-        // Shared Enter-to-save / Escape-to-cancel handling for both lists'
-        // edit forms. renderFn is whichever of renderActive()/renderArchived()
-        // owns the row the event originated in.
-        function handleEditKeydown(renderFn) {
-          return (e) => {
-            if (!e.target.matches(".edit-title, .edit-value")) return;
-
-            if (e.key === "Escape") {
-              editingId = null;
-              editDraft = null;
-              renderFn();
-            } else if (e.key === "Enter") {
-              // Ignore the Enter that confirms an IME composition (e.g.
-              // finalizing Japanese kanji conversion) — it must not also
-              // submit the edit.
-              if (e.isComposing) return;
-
-              const row = e.target.closest(".timer");
-              const id = Number(row?.dataset.id);
-              const t =
-                timers.find((x) => x.id === id) ||
-                archived.find((x) => x.id === id);
-
-              if (t && applyEditFields(row, t)) {
-                Storage.save();
-                renderFn();
-              }
-            }
-          };
-        }
-
-        // Keep editDraft in sync with in-progress (unsaved) edits so a full
-        // renderActive()/renderArchived() triggered by unrelated state
-        // doesn't wipe them.
-        function handleEditInput(e) {
-          if (editingId == null) return;
-
-          const isWeekdayCheckbox = e.target.matches(
-            '.weekday-toggle-row input[type="checkbox"]',
-          );
-          if (
-            !isWeekdayCheckbox &&
-            !e.target.matches(".edit-title, .edit-value")
-          ) {
-            return;
-          }
-
-          const row = e.target.closest(".timer");
-          if (!row || Number(row.dataset.id) !== editingId) return;
-
-          const t =
-            timers.find((x) => x.id === editingId) ||
-            archived.find((x) => x.id === editingId);
-          if (!t) return;
-
-          if (!editDraft) {
-            editDraft = {
+        // Inline edit form shown in place of a row's normal content.
+        // Shared by the Timers and Archived lists: both item shapes carry
+        // the same title/tags/mode/originalDuration/targetTime/daysOfWeek
+        // fields.
+        const EditForm = {
+          html(t) {
+            const draft = editDraft || {
               title: composeTitleWithTags(t),
               value:
                 t.mode === "time"
@@ -2285,55 +1988,362 @@
                   : durationToEditableString(t.originalDuration),
               daysOfWeek: t.daysOfWeek,
             };
-          }
 
-          if (e.target.classList.contains("edit-title")) {
-            editDraft.title = e.target.value;
-          } else if (isWeekdayCheckbox) {
-            editDraft.daysOfWeek = readDaysOfWeek(row);
-          } else {
-            editDraft.value = e.target.value;
-          }
-        }
+            const valueField =
+              t.mode === "time"
+                ? html`
+                    <input
+                      type="time"
+                      step="1"
+                      class="edit-value"
+                      aria-label="At time"
+                      value="${escapeHtml(draft.value || "")}"
+                    />
+                  `
+                : html`
+                    <input
+                      type="text"
+                      inputmode="numeric"
+                      class="edit-value"
+                      aria-label="Duration"
+                      placeholder="5:00 / 5 / 1h / 30s / 2d"
+                      value="${escapeHtml(draft.value || "")}"
+                    />
+                  `;
 
-        // Enter-to-confirm / Escape-to-cancel for the snooze form. Only
-        // active timers offer Snooze, so unlike handleEditKeydown this
-        // doesn't need a renderFn parameter — it always re-renders the
-        // Timers list.
-        function handleSnoozeKeydown(e) {
-          if (!e.target.matches(".snooze-value")) return;
+            // On its own second line (after title/value/controls) so the
+            // first line stays identical in shape to the Duration mode
+            // edit row instead of pushing Save/Cancel down to a third
+            // line.
+            const weekdayField =
+              t.mode === "time"
+                ? html`
+                    <div
+                      class="weekday-toggle-row"
+                      role="group"
+                      aria-label="Days of week (optional; none = every day)"
+                    >
+                      ${WEEKDAY_DISPLAY_ORDER.map(
+                        (day) => html`
+                          <input
+                            type="checkbox"
+                            id="edit-day-${t.id}-${day}"
+                            data-day="${day}"
+                            ${draft.daysOfWeek?.includes(day) ? "checked" : ""}
+                          />
+                          <label for="edit-day-${t.id}-${day}">
+                            ${WEEKDAY_LABELS[day]}
+                          </label>
+                        `,
+                      ).join("")}
+                    </div>
+                  `
+                : "";
 
-          if (e.key === "Escape") {
-            snoozingId = null;
-            snoozeDraft = null;
-            renderActive();
-          } else if (e.key === "Enter") {
-            if (e.isComposing) return;
+            return html`
+              <div class="edit-row">
+                <input
+                  type="text"
+                  class="edit-title"
+                  aria-label="Title"
+                  placeholder="e.g., Tea #break / Meeting #work"
+                  value="${escapeHtml(draft.title || "")}"
+                />
+                ${valueField}
+                <div class="controls">
+                  <button
+                    class="accent"
+                    data-act="save-edit"
+                    data-tooltip="Save"
+                    aria-label="Save"
+                    type="button"
+                  >
+                    ${icon("check")}
+                  </button>
+                  <button
+                    class="neutral"
+                    data-act="cancel-edit"
+                    data-tooltip="Cancel"
+                    aria-label="Cancel"
+                    type="button"
+                  >
+                    ${icon("x")}
+                  </button>
+                </div>
+                ${weekdayField}
+              </div>
+            `;
+          },
+
+          // Apply an edit form's current input values to `t` (a timer or
+          // archived item — both share the same fields). Returns false
+          // (leaving the edit form open) if the value field failed to
+          // parse. Archived items have no endAt/paused/notified, so those
+          // updates are skipped via the `"endAt" in t` guard, letting
+          // active timers and archived items share this one method.
+          apply(row, t) {
+            const titleInput = $(".edit-title", row);
+            const valueInput = $(".edit-value", row);
+            const { title, tags } = extractTagsFromTitle(titleInput.value);
+            const now = Date.now();
+
+            if (t.mode === "time") {
+              const targetTime = valueInput.value;
+              const daysOfWeek = readDaysOfWeek(row);
+              const endAt = computeNextTimeBasedEndAt(
+                targetTime,
+                now,
+                daysOfWeek,
+              );
+
+              if (!targetTime || endAt == null) {
+                alert("Enter a valid time (HH:MM or HH:MM:SS).");
+                return false;
+              }
+
+              t.targetTime = targetTime;
+              t.daysOfWeek = daysOfWeek;
+              if ("endAt" in t) {
+                t.endAt = endAt;
+                t.notified = false;
+                t.snoozed = false;
+              }
+            } else {
+              const dur = parseDuration(valueInput.value);
+
+              if (!dur || dur <= 0) {
+                alert("Enter duration as mm:ss or minutes (number).");
+                return false;
+              }
+
+              // Preserve elapsed time: shift endAt/remainingAtPause by
+              // exactly the change in total duration, rather than
+              // restarting the countdown from now.
+              const delta = dur - t.originalDuration;
+              t.originalDuration = dur;
+              if ("endAt" in t) {
+                if (t.paused) {
+                  t.remainingAtPause = clamp0(
+                    (t.remainingAtPause || 0) + delta,
+                  );
+                } else {
+                  t.endAt += delta;
+                }
+                t.notified = false;
+                t.snoozed = false;
+              }
+            }
+
+            t.title = title;
+            t.tags = tags;
+
+            editingId = null;
+            editDraft = null;
+            return true;
+          },
+
+          focusTitle(containerEl) {
+            const input = $(".editing .edit-title", containerEl);
+            if (input) {
+              input.focus();
+              input.select();
+            }
+          },
+
+          // Shared Enter-to-save / Escape-to-cancel handling for both
+          // lists' edit forms. renderFn is whichever of
+          // renderActive()/renderArchived() owns the row the event
+          // originated in.
+          handleKeydown(renderFn) {
+            return (e) => {
+              if (!e.target.matches(".edit-title, .edit-value")) return;
+
+              if (e.key === "Escape") {
+                editingId = null;
+                editDraft = null;
+                renderFn();
+              } else if (e.key === "Enter") {
+                // Ignore the Enter that confirms an IME composition (e.g.
+                // finalizing Japanese kanji conversion) — it must not
+                // also submit the edit.
+                if (e.isComposing) return;
+
+                const row = e.target.closest(".timer");
+                const id = Number(row?.dataset.id);
+                const t =
+                  timers.find((x) => x.id === id) ||
+                  archived.find((x) => x.id === id);
+
+                if (t && EditForm.apply(row, t)) {
+                  Storage.save();
+                  renderFn();
+                }
+              }
+            };
+          },
+
+          // Keep editDraft in sync with in-progress (unsaved) edits so a
+          // full renderActive()/renderArchived() triggered by unrelated
+          // state doesn't wipe them.
+          handleInput(e) {
+            if (editingId == null) return;
+
+            const isWeekdayCheckbox = e.target.matches(
+              '.weekday-toggle-row input[type="checkbox"]',
+            );
+            if (
+              !isWeekdayCheckbox &&
+              !e.target.matches(".edit-title, .edit-value")
+            ) {
+              return;
+            }
 
             const row = e.target.closest(".timer");
-            const id = Number(row?.dataset.id);
-            const t = timers.find((x) => x.id === id);
+            if (!row || Number(row.dataset.id) !== editingId) return;
 
-            if (t && saveSnooze(row, t)) {
-              Storage.save();
-              renderActive();
+            const t =
+              timers.find((x) => x.id === editingId) ||
+              archived.find((x) => x.id === editingId);
+            if (!t) return;
+
+            if (!editDraft) {
+              editDraft = {
+                title: composeTitleWithTags(t),
+                value:
+                  t.mode === "time"
+                    ? t.targetTime
+                    : durationToEditableString(t.originalDuration),
+                daysOfWeek: t.daysOfWeek,
+              };
             }
-          }
-        }
 
-        // Keep snoozeDraft in sync with in-progress (unsaved) input so a
-        // full renderActive() triggered by unrelated state doesn't reset it
-        // back to the default value.
-        function handleSnoozeInput(e) {
-          if (snoozingId == null || !e.target.matches(".snooze-value")) {
-            return;
-          }
+            if (e.target.classList.contains("edit-title")) {
+              editDraft.title = e.target.value;
+            } else if (isWeekdayCheckbox) {
+              editDraft.daysOfWeek = readDaysOfWeek(row);
+            } else {
+              editDraft.value = e.target.value;
+            }
+          },
+        };
 
-          const row = e.target.closest(".timer");
-          if (!row || Number(row.dataset.id) !== snoozingId) return;
+        // Inline "extend by" form shown in place of a Done timer's Ends
+        // At/Remaining/Status/Controls — the title (unlike EditForm.html,
+        // which replaces the whole row including the title) stays put.
+        // Only offered for active timers, so unlike EditForm.html this
+        // doesn't need to handle the archived-item shape.
+        const SnoozeForm = {
+          html(t) {
+            const draft = snoozeDraft || { value: "5" };
 
-          snoozeDraft = { value: e.target.value };
-        }
+            return html`
+              <div class="edit-row snooze-row">
+                <span class="snooze-label snooze-label-wide">Snooze for</span>
+                <span class="snooze-label snooze-label-narrow">Snooze:</span>
+                <input
+                  type="text"
+                  inputmode="numeric"
+                  class="snooze-value"
+                  aria-label="Snooze duration (mm:ss or minutes)"
+                  placeholder="5:00 / 5 / 1h / 30s"
+                  value="${escapeHtml(draft.value)}"
+                />
+                <div class="controls">
+                  <button
+                    class="accent"
+                    data-act="confirm-snooze"
+                    data-tooltip="Snooze"
+                    aria-label="Snooze"
+                    type="button"
+                  >
+                    ${icon("check")}
+                  </button>
+                  <button
+                    class="neutral"
+                    data-act="cancel-snooze"
+                    data-tooltip="Cancel"
+                    aria-label="Cancel"
+                    type="button"
+                  >
+                    ${icon("x")}
+                  </button>
+                </div>
+              </div>
+            `;
+          },
+
+          // Apply a snooze form's current input value to `t`. Returns
+          // false (leaving the form open) if the value doesn't parse to a
+          // positive duration — same mm:ss / minutes / 1h / 30s / 2d
+          // format as the Duration mode field, via parseDuration().
+          // Deliberately doesn't touch originalDuration/targetTime, so a
+          // later Restart still uses the timer's original setting rather
+          // than the snoozed length.
+          save(row, t) {
+            const valueInput = $(".snooze-value", row);
+            const dur = parseDuration(valueInput.value);
+
+            if (!dur || dur <= 0) {
+              alert("Enter snooze duration as mm:ss or minutes (number).");
+              return false;
+            }
+
+            t.endAt = alignEndAtToSecond(Date.now() + dur);
+            t.notified = false;
+            t.snoozed = true;
+
+            snoozingId = null;
+            snoozeDraft = null;
+            return true;
+          },
+
+          focusValue(containerEl) {
+            const input = $(".snoozing .snooze-value", containerEl);
+            if (input) {
+              input.focus();
+              input.select();
+            }
+          },
+
+          // Enter-to-confirm / Escape-to-cancel for the snooze form. Only
+          // active timers offer Snooze, so unlike EditForm.handleKeydown
+          // this doesn't need a renderFn parameter — it always re-renders
+          // the Timers list.
+          handleKeydown(e) {
+            if (!e.target.matches(".snooze-value")) return;
+
+            if (e.key === "Escape") {
+              snoozingId = null;
+              snoozeDraft = null;
+              renderActive();
+            } else if (e.key === "Enter") {
+              if (e.isComposing) return;
+
+              const row = e.target.closest(".timer");
+              const id = Number(row?.dataset.id);
+              const t = timers.find((x) => x.id === id);
+
+              if (t && SnoozeForm.save(row, t)) {
+                Storage.save();
+                renderActive();
+              }
+            }
+          },
+
+          // Keep snoozeDraft in sync with in-progress (unsaved) input so
+          // a full renderActive() triggered by unrelated state doesn't
+          // reset it back to the default value.
+          handleInput(e) {
+            if (snoozingId == null || !e.target.matches(".snooze-value")) {
+              return;
+            }
+
+            const row = e.target.closest(".timer");
+            if (!row || Number(row.dataset.id) !== snoozingId) return;
+
+            snoozeDraft = { value: e.target.value };
+          },
+        };
 
         const timersTagFilterEl = $("#timers-tag-filter");
 
@@ -2477,7 +2487,7 @@
 
           // Only reached when t.id !== snoozingId — see html() below, which
           // replaces .controls (and everything else after .title) with
-          // snoozeFormHtml() once this row's own form is open, so there's
+          // SnoozeForm.html() once this row's own form is open, so there's
           // no redundant trigger sitting next to it. Like restartButton, called
           // with no extraClass for the row-menu-popover's copy.
           function snoozeButton(vm, extraClass = "") {
@@ -2501,13 +2511,13 @@
               // .when picks up a "snoozed" class from t.snoozed so a
               // snoozed run's Ends At time stays visually distinct even
               // after it reaches Done again — t.snoozed is only cleared by
-              // Restart or Edit (see applyEditFields), which define a
+              // Restart or Edit (see EditForm.apply), which define a
               // genuinely
               // new run, deliberately not by tick()'s natural-completion
               // branch.
               const restOfRowHtml =
                 t.id === snoozingId
-                  ? snoozeFormHtml(t)
+                  ? SnoozeForm.html(t)
                   : html`
                       <div class="when-remain">
                         <div
@@ -2689,7 +2699,7 @@
 
             if (t.id === editingId) {
               row.className = "timer editing";
-              row.innerHTML = editRowHtml(t);
+              row.innerHTML = EditForm.html(t);
               listEl.appendChild(row);
               continue;
             }
@@ -2881,7 +2891,7 @@
 
             if (t.id === editingId) {
               row.className = "timer archive-row editing";
-              row.innerHTML = editRowHtml(t);
+              row.innerHTML = EditForm.html(t);
               archiveListEl.appendChild(row);
               continue;
             }
@@ -3117,7 +3127,7 @@
             snoozingId = null;
             snoozeDraft = null;
             renderActive();
-            focusEditTitle(listEl);
+            EditForm.focusTitle(listEl);
           },
 
           cancelEdit() {
@@ -3127,7 +3137,7 @@
           },
 
           saveEdit(row, t) {
-            if (applyEditFields(row, t)) {
+            if (EditForm.apply(row, t)) {
               Storage.save();
               renderActive();
             }
@@ -3139,7 +3149,7 @@
             editingId = null;
             editDraft = null;
             renderActive();
-            focusSnoozeValue(listEl);
+            SnoozeForm.focusValue(listEl);
           },
 
           cancelSnooze() {
@@ -3149,7 +3159,7 @@
           },
 
           confirmSnooze(row, t) {
-            if (saveSnooze(row, t)) {
+            if (SnoozeForm.save(row, t)) {
               Storage.save();
               renderActive();
             }
@@ -3217,10 +3227,13 @@
           }
         });
 
-        listEl.addEventListener("input", handleEditInput);
-        listEl.addEventListener("keydown", handleEditKeydown(renderActive));
-        listEl.addEventListener("input", handleSnoozeInput);
-        listEl.addEventListener("keydown", handleSnoozeKeydown);
+        listEl.addEventListener("input", EditForm.handleInput);
+        listEl.addEventListener(
+          "keydown",
+          EditForm.handleKeydown(renderActive),
+        );
+        listEl.addEventListener("input", SnoozeForm.handleInput);
+        listEl.addEventListener("keydown", SnoozeForm.handleKeydown);
 
         // Close any open row-menu popover (see .row-menu in the CSS) when
         // clicking outside of it, matching normal dropdown behavior.
@@ -3313,7 +3326,7 @@
             editingId = id;
             editDraft = null;
             renderArchived();
-            focusEditTitle(archiveListEl);
+            EditForm.focusTitle(archiveListEl);
           },
 
           cancelEdit() {
@@ -3323,7 +3336,7 @@
           },
 
           saveEdit(row, t) {
-            if (applyEditFields(row, t)) {
+            if (EditForm.apply(row, t)) {
               Storage.save();
               renderArchived();
             }
@@ -3360,10 +3373,10 @@
           }
         });
 
-        archiveListEl.addEventListener("input", handleEditInput);
+        archiveListEl.addEventListener("input", EditForm.handleInput);
         archiveListEl.addEventListener(
           "keydown",
-          handleEditKeydown(renderArchived),
+          EditForm.handleKeydown(renderArchived),
         );
 
         timersTagFilterEl.addEventListener("click", (e) => {
