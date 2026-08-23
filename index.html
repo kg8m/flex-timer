@@ -2047,7 +2047,7 @@
         // Archived items have no endAt/paused/notified, so those updates
         // are skipped via the `"endAt" in t` guard, letting active timers
         // and archived items share this one function.
-        function saveEdit(row, t) {
+        function applyEditFields(row, t) {
           const titleInput = $(".edit-title", row);
           const valueInput = $(".edit-value", row);
           const { title, tags } = extractTagsFromTitle(titleInput.value);
@@ -2213,7 +2213,7 @@
                 timers.find((x) => x.id === id) ||
                 archived.find((x) => x.id === id);
 
-              if (t && saveEdit(row, t)) {
+              if (t && applyEditFields(row, t)) {
                 Storage.save();
                 renderFn();
               }
@@ -2470,7 +2470,8 @@
               // .when picks up a "snoozed" class from t.snoozed so a
               // snoozed run's Ends At time stays visually distinct even
               // after it reaches Done again — t.snoozed is only cleared by
-              // Restart or Edit (see saveEdit), which define a genuinely
+              // Restart or Edit (see applyEditFields), which define a
+              // genuinely
               // new run, deliberately not by tick()'s natural-completion
               // branch.
               const restOfRowHtml =
@@ -3011,120 +3012,124 @@
           $("#title").focus();
         });
 
-        function deleteTimer(t) {
-          timers = timers.filter((x) => x.id !== t.id);
-          moveToTrash(t);
-          Storage.save();
-          renderActive();
-          renderTrash();
-        }
-
-        function archiveTimer(t) {
-          timers = timers.filter((x) => x.id !== t.id);
-          moveToArchive(t);
-          Storage.save();
-          renderActive();
-          renderArchived();
-        }
-
-        function pauseTimer(t) {
-          const now = Date.now();
-          t.paused = true;
-          t.pausedAt = now;
-          t.remainingAtPause = t.endAt - now;
-          Storage.save();
-          renderActive();
-        }
-
-        function resumeTimer(t) {
-          const now = Date.now();
-          t.paused = false;
-          t.endAt = alignEndAtToSecond(now + (t.remainingAtPause || 0));
-          t.notified = false;
-          delete t.pausedAt;
-          delete t.remainingAtPause;
-          Storage.save();
-          renderActive();
-        }
-
-        function restartTimer(t) {
-          const now = Date.now();
-          t.endAt = computeRestartEndAt(t, now);
-          t.createdAt = now;
-          t.notified = false;
-          t.snoozed = false;
-          t.paused = false;
-          delete t.pausedAt;
-          delete t.remainingAtPause;
-          Storage.save();
-          renderActive();
-        }
-
-        // While snoozed, t.endAt holds the snooze re-fire time rather than
-        // an on-schedule target-time instant, so re-deriving from
-        // t.targetTime (anchored to t.endAt's calendar day) rather than
-        // just adding 24h keeps the skip aligned to the actual target time
-        // even mid-snooze.
-        function skipTimer(t) {
-          t.endAt = computeNextTimeBasedEndAt(
-            t.targetTime,
-            t.endAt,
-            t.daysOfWeek,
-          );
-          t.snoozed = false;
-          Storage.save();
-          renderActive();
-        }
-
-        function startEditActive(id) {
-          editingId = id;
-          editDraft = null;
-          snoozingId = null;
-          snoozeDraft = null;
-          renderActive();
-          focusEditTitle(listEl);
-        }
-
-        function cancelEditActive() {
-          editingId = null;
-          editDraft = null;
-          renderActive();
-        }
-
-        function saveEditActive(row, t) {
-          if (saveEdit(row, t)) {
+        // Actions available on an Active-list row, dispatched by data-act
+        // from the click handler below.
+        const ActiveActions = {
+          delete(t) {
+            timers = timers.filter((x) => x.id !== t.id);
+            moveToTrash(t);
             Storage.save();
             renderActive();
-          }
-        }
+            renderTrash();
+          },
 
-        function startSnooze(id) {
-          snoozingId = id;
-          snoozeDraft = null;
-          editingId = null;
-          editDraft = null;
-          renderActive();
-          focusSnoozeValue(listEl);
-        }
-
-        function cancelSnooze() {
-          snoozingId = null;
-          snoozeDraft = null;
-          renderActive();
-        }
-
-        function confirmSnooze(row, t) {
-          if (saveSnooze(row, t)) {
+          archive(t) {
+            timers = timers.filter((x) => x.id !== t.id);
+            moveToArchive(t);
             Storage.save();
             renderActive();
-          }
-        }
+            renderArchived();
+          },
 
-        function toggleRowMenu(button) {
-          const menu = button.closest(".row-menu");
-          const isOpen = menu?.classList.toggle("open");
-          button.setAttribute("aria-expanded", String(!!isOpen));
-        }
+          pause(t) {
+            const now = Date.now();
+            t.paused = true;
+            t.pausedAt = now;
+            t.remainingAtPause = t.endAt - now;
+            Storage.save();
+            renderActive();
+          },
+
+          resume(t) {
+            const now = Date.now();
+            t.paused = false;
+            t.endAt = alignEndAtToSecond(now + (t.remainingAtPause || 0));
+            t.notified = false;
+            delete t.pausedAt;
+            delete t.remainingAtPause;
+            Storage.save();
+            renderActive();
+          },
+
+          restart(t) {
+            const now = Date.now();
+            t.endAt = computeRestartEndAt(t, now);
+            t.createdAt = now;
+            t.notified = false;
+            t.snoozed = false;
+            t.paused = false;
+            delete t.pausedAt;
+            delete t.remainingAtPause;
+            Storage.save();
+            renderActive();
+          },
+
+          // While snoozed, t.endAt holds the snooze re-fire time rather
+          // than an on-schedule target-time instant, so re-deriving from
+          // t.targetTime (anchored to t.endAt's calendar day) rather than
+          // just adding 24h keeps the skip aligned to the actual target
+          // time even mid-snooze.
+          skip(t) {
+            t.endAt = computeNextTimeBasedEndAt(
+              t.targetTime,
+              t.endAt,
+              t.daysOfWeek,
+            );
+            t.snoozed = false;
+            Storage.save();
+            renderActive();
+          },
+
+          startEdit(id) {
+            editingId = id;
+            editDraft = null;
+            snoozingId = null;
+            snoozeDraft = null;
+            renderActive();
+            focusEditTitle(listEl);
+          },
+
+          cancelEdit() {
+            editingId = null;
+            editDraft = null;
+            renderActive();
+          },
+
+          saveEdit(row, t) {
+            if (applyEditFields(row, t)) {
+              Storage.save();
+              renderActive();
+            }
+          },
+
+          startSnooze(id) {
+            snoozingId = id;
+            snoozeDraft = null;
+            editingId = null;
+            editDraft = null;
+            renderActive();
+            focusSnoozeValue(listEl);
+          },
+
+          cancelSnooze() {
+            snoozingId = null;
+            snoozeDraft = null;
+            renderActive();
+          },
+
+          confirmSnooze(row, t) {
+            if (saveSnooze(row, t)) {
+              Storage.save();
+              renderActive();
+            }
+          },
+
+          toggleMenu(button) {
+            const menu = button.closest(".row-menu");
+            const isOpen = menu?.classList.toggle("open");
+            button.setAttribute("aria-expanded", String(!!isOpen));
+          },
+        };
 
         // Timer controls (pause/resume/restart/delete)
         listEl.addEventListener("click", (e) => {
@@ -3143,31 +3148,31 @@
           const t = timers.find((x) => x.id === id);
 
           if (act === "delete" && t) {
-            deleteTimer(t);
+            ActiveActions.delete(t);
           } else if (act === "archive" && t) {
-            archiveTimer(t);
+            ActiveActions.archive(t);
           } else if (act === "pause" && t && !t.paused) {
-            pauseTimer(t);
+            ActiveActions.pause(t);
           } else if (act === "resume" && t && t.paused) {
-            resumeTimer(t);
+            ActiveActions.resume(t);
           } else if (act === "restart" && t) {
-            restartTimer(t);
+            ActiveActions.restart(t);
           } else if (act === "skip" && t && t.mode === "time") {
-            skipTimer(t);
+            ActiveActions.skip(t);
           } else if (act === "edit" && t) {
-            startEditActive(id);
+            ActiveActions.startEdit(id);
           } else if (act === "cancel-edit") {
-            cancelEditActive();
+            ActiveActions.cancelEdit();
           } else if (act === "save-edit" && t) {
-            saveEditActive(row, t);
+            ActiveActions.saveEdit(row, t);
           } else if (act === "snooze" && t) {
-            startSnooze(id);
+            ActiveActions.startSnooze(id);
           } else if (act === "cancel-snooze") {
-            cancelSnooze();
+            ActiveActions.cancelSnooze();
           } else if (act === "confirm-snooze" && t) {
-            confirmSnooze(row, t);
+            ActiveActions.confirmSnooze(row, t);
           } else if (act === "toggle-menu") {
-            toggleRowMenu(button);
+            ActiveActions.toggleMenu(button);
           }
         });
 
@@ -3210,13 +3215,17 @@
           };
         }
 
-        function restoreFromTrash(t) {
-          trash = trash.filter((x) => x.id !== t.id);
-          timers.push(reviveTimer(t, Date.now()));
-          Storage.save();
-          renderActive();
-          renderTrash();
-        }
+        // Actions available on a Trash-list row, dispatched by data-act
+        // from the click handler below.
+        const TrashActions = {
+          restore(t) {
+            trash = trash.filter((x) => x.id !== t.id);
+            timers.push(reviveTimer(t, Date.now()));
+            Storage.save();
+            renderActive();
+            renderTrash();
+          },
+        };
 
         // Trash controls (restore)
         trashListEl.addEventListener("click", (e) => {
@@ -3236,45 +3245,49 @@
           if (!t) return;
 
           if (act === "restore") {
-            restoreFromTrash(t);
+            TrashActions.restore(t);
           }
         });
 
-        function restartFromArchive(t) {
-          archived = archived.filter((x) => x.id !== t.id);
-          timers.push(reviveTimer(t, Date.now()));
-          Storage.save();
-          renderActive();
-          renderArchived();
-        }
+        // Actions available on an Archived-list row, dispatched by
+        // data-act from the click handler below.
+        const ArchiveActions = {
+          restart(t) {
+            archived = archived.filter((x) => x.id !== t.id);
+            timers.push(reviveTimer(t, Date.now()));
+            Storage.save();
+            renderActive();
+            renderArchived();
+          },
 
-        function deleteFromArchive(t) {
-          archived = archived.filter((x) => x.id !== t.id);
-          moveToTrash(t);
-          Storage.save();
-          renderArchived();
-          renderTrash();
-        }
-
-        function startEditArchive(id) {
-          editingId = id;
-          editDraft = null;
-          renderArchived();
-          focusEditTitle(archiveListEl);
-        }
-
-        function cancelEditArchive() {
-          editingId = null;
-          editDraft = null;
-          renderArchived();
-        }
-
-        function saveEditArchive(row, t) {
-          if (saveEdit(row, t)) {
+          delete(t) {
+            archived = archived.filter((x) => x.id !== t.id);
+            moveToTrash(t);
             Storage.save();
             renderArchived();
-          }
-        }
+            renderTrash();
+          },
+
+          startEdit(id) {
+            editingId = id;
+            editDraft = null;
+            renderArchived();
+            focusEditTitle(archiveListEl);
+          },
+
+          cancelEdit() {
+            editingId = null;
+            editDraft = null;
+            renderArchived();
+          },
+
+          saveEdit(row, t) {
+            if (applyEditFields(row, t)) {
+              Storage.save();
+              renderArchived();
+            }
+          },
+        };
 
         // Archive controls (restart/delete)
         archiveListEl.addEventListener("click", (e) => {
@@ -3294,15 +3307,15 @@
           if (!t) return;
 
           if (act === "restart") {
-            restartFromArchive(t);
+            ArchiveActions.restart(t);
           } else if (act === "delete") {
-            deleteFromArchive(t);
+            ArchiveActions.delete(t);
           } else if (act === "edit") {
-            startEditArchive(id);
+            ArchiveActions.startEdit(id);
           } else if (act === "cancel-edit") {
-            cancelEditArchive();
+            ArchiveActions.cancelEdit();
           } else if (act === "save-edit") {
-            saveEditArchive(row, t);
+            ArchiveActions.saveEdit(row, t);
           }
         });
 
