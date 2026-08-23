@@ -3190,6 +3190,34 @@
           });
         });
 
+        // Rebuilds a fresh Active timer entry from a Trash or Archived
+        // item — shared by restoreFromTrash and restartFromArchive, which
+        // otherwise duplicate this exact object shape.
+        function reviveTimer(t, now) {
+          return {
+            id: seq++,
+            title: t.title,
+            tags: t.tags || [],
+            mode: t.mode,
+            endAt: computeRestartEndAt(t, now),
+            createdAt: now,
+            notified: false,
+            snoozed: false,
+            paused: false,
+            originalDuration: t.originalDuration,
+            targetTime: t.targetTime,
+            daysOfWeek: t.daysOfWeek,
+          };
+        }
+
+        function restoreFromTrash(idx) {
+          const [t] = trash.splice(idx, 1);
+          timers.push(reviveTimer(t, Date.now()));
+          Storage.save();
+          renderActive();
+          renderTrash();
+        }
+
         // Trash controls (restore)
         trashListEl.addEventListener("click", (e) => {
           const tagEl = e.target.closest(".tag");
@@ -3208,47 +3236,13 @@
           if (idx === -1) return;
 
           if (act === "restore") {
-            const [t] = trash.splice(idx, 1);
-            const now = Date.now();
-
-            timers.push({
-              id: seq++,
-              title: t.title,
-              tags: t.tags || [],
-              mode: t.mode,
-              endAt: computeRestartEndAt(t, now),
-              createdAt: now,
-              notified: false,
-              snoozed: false,
-              paused: false,
-              originalDuration: t.originalDuration,
-              targetTime: t.targetTime,
-              daysOfWeek: t.daysOfWeek,
-            });
-
-            Storage.save();
-            renderActive();
-            renderTrash();
+            restoreFromTrash(idx);
           }
         });
 
         function restartFromArchive(idx, t) {
-          const now = Date.now();
           archived.splice(idx, 1);
-          timers.push({
-            id: seq++,
-            title: t.title,
-            tags: t.tags || [],
-            mode: t.mode,
-            endAt: computeRestartEndAt(t, now),
-            createdAt: now,
-            notified: false,
-            snoozed: false,
-            paused: false,
-            originalDuration: t.originalDuration,
-            targetTime: t.targetTime,
-            daysOfWeek: t.daysOfWeek,
-          });
+          timers.push(reviveTimer(t, Date.now()));
           Storage.save();
           renderActive();
           renderArchived();
