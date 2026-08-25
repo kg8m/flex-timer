@@ -72,75 +72,6 @@
   const $ = (sel, el = document) => el.querySelector(sel);
   const fmt2 = (n) => String(Math.floor(Math.abs(n))).padStart(2, "0");
   const clamp0 = (ms) => (ms < 0 ? 0 : ms);
-  // time-only (no date)
-  const toTime = (ts) => new Date(ts).toLocaleTimeString([], { hour12: false });
-  const isSameDay = (a, b) =>
-    new Date(a).toDateString() === new Date(b).toDateString();
-  // date with weekday, for tooltips on cross-day "Ends At" times
-  const toDateWithWeekday = (ts) =>
-    new Date(ts).toLocaleDateString([], {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      weekday: "short",
-    });
-
-  // Short weekday names indexed like Date#getDay() (0=Sunday) — this
-  // indexing is load-bearing (checkbox data-day values and
-  // advanceToAllowedDay's day-of-week matching both key off it) and
-  // must not change even though the UI displays/lists Monday first.
-  const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-  // Display order for the weekday toggle buttons and daysOfWeekLabel:
-  // Monday first, Sunday last (still Date#getDay() values under the
-  // hood, just reordered for presentation).
-  const WEEKDAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
-
-  // Comma-joined weekday names (Monday-first) for a "time" mode
-  // timer's daysOfWeek restriction, or "" when unrestricted (fires
-  // every day).
-  function daysOfWeekLabel(daysOfWeek) {
-    if (!daysOfWeek || !daysOfWeek.length) return "";
-    const order = new Set(daysOfWeek);
-    return WEEKDAY_DISPLAY_ORDER.filter((d) => order.has(d))
-      .map((d) => WEEKDAY_LABELS[d])
-      .join(", ");
-  }
-
-  function parseDuration(input) {
-    const s = String(input || "").trim();
-    if (!s) return 0;
-
-    if (/^\d+:\d{1,2}:\d{1,2}$/.test(s)) {
-      const [h, m, sec] = s.split(":").map(Number);
-      return (h * 60 * 60 + m * 60 + sec) * 1000;
-    }
-
-    if (/^\d+:\d{1,2}$/.test(s)) {
-      const [m, sec] = s.split(":").map(Number);
-      return (m * 60 + sec) * 1000;
-    }
-
-    if (/^\d+(?:\.\d+)?$/.test(s)) {
-      // treat as minutes (allow decimals)
-      return Math.round(parseFloat(s) * 60 * 1000);
-    }
-
-    // allow short units like 1h, 90s, 500ms, 2d
-    const m = s.match(/^(\d+(?:\.\d+)?)(ms|s|m|h|d)$/i);
-    if (m) {
-      const v = parseFloat(m[1]);
-      const unit = m[2].toLowerCase();
-
-      if (unit === "ms") return Math.max(0, Math.round(v));
-      if (unit === "s") return Math.round(v * 1000);
-      if (unit === "m") return Math.round(v * 60 * 1000);
-      if (unit === "h") return Math.round(v * 3600 * 1000);
-      if (unit === "d") return Math.round(v * 86400 * 1000);
-    }
-
-    return 0;
-  }
 
   // Pull #tag tokens out of a title string instead of requiring a
   // separate tags field: any "#" followed by non-whitespace becomes a
@@ -168,98 +99,206 @@
     return [t.title, tagTokens].filter(Boolean).join(" ");
   }
 
-  // Push `target` forward in 24h steps until it lands on a day-of-week
-  // present in `daysOfWeek` (0=Sunday..6=Saturday, matching
-  // Date#getDay()). A no-op when daysOfWeek is empty/undefined, which
-  // means "every day". Bounded to 7 iterations since some day within
-  // a week is always allowed whenever daysOfWeek is non-empty.
-  function advanceToAllowedDay(target, daysOfWeek) {
-    if (!daysOfWeek || !daysOfWeek.length) return target;
+  // Duration/time-of-day computation and formatting: parsing, resolving
+  // a timer's next end time, and rendering a duration back to the user
+  // in various forms.
+  // Point-in-time / calendar concerns: clock-time formatting, weekday
+  // restrictions, and resolving a "time" mode timer's next occurrence.
+  const Clock = (() => {
+    // Push `target` forward in 24h steps until it lands on a day-of-week
+    // present in `daysOfWeek` (0=Sunday..6=Saturday, matching
+    // Date#getDay()). A no-op when daysOfWeek is empty/undefined, which
+    // means "every day". Bounded to 7 iterations since some day within
+    // a week is always allowed whenever daysOfWeek is non-empty.
+    function advanceToAllowedDay(target, daysOfWeek) {
+      if (!daysOfWeek || !daysOfWeek.length) return target;
 
-    for (
-      let i = 0;
-      i < 7 && !daysOfWeek.includes(new Date(target).getDay());
-      i++
-    ) {
-      target += 24 * 60 * 60 * 1000;
+      for (
+        let i = 0;
+        i < 7 && !daysOfWeek.includes(new Date(target).getDay());
+        i++
+      ) {
+        target += 24 * 60 * 60 * 1000;
+      }
+
+      return target;
     }
 
-    return target;
-  }
+    return {
+      // time-only (no date)
+      toTime(ts) {
+        return new Date(ts).toLocaleTimeString([], { hour12: false });
+      },
 
-  // Resolve "HH:MM" or "HH:MM:SS" to the next occurrence of that time
-  // (today if it hasn't passed yet, otherwise tomorrow), further
-  // restricted to daysOfWeek if given. Seconds are optional and
-  // default to 0.
-  function computeNextTimeBasedEndAt(timeStr, now = Date.now(), daysOfWeek) {
-    const m = String(timeStr || "").match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-    if (!m) return null;
+      isSameDay(a, b) {
+        return new Date(a).toDateString() === new Date(b).toDateString();
+      },
 
-    const hh = Number(m[1]);
-    const mm = Number(m[2]);
-    const ss = m[3] ? Number(m[3]) : 0;
-    const d = new Date(now);
-    d.setHours(hh, mm, ss, 0);
+      // date with weekday, for tooltips on cross-day "Ends At" times
+      toDateWithWeekday(ts) {
+        return new Date(ts).toLocaleDateString([], {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          weekday: "short",
+        });
+      },
 
-    let target = d.getTime();
-    if (target <= now) target += 24 * 60 * 60 * 1000;
+      // Short weekday names indexed like Date#getDay() (0=Sunday) —
+      // this indexing is load-bearing (checkbox data-day values and
+      // advanceToAllowedDay's day-of-week matching both key off it)
+      // and must not change even though the UI displays/lists Monday
+      // first.
+      WEEKDAY_LABELS: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
 
-    return advanceToAllowedDay(target, daysOfWeek);
-  }
+      // Display order for the weekday toggle buttons and
+      // daysOfWeekLabel: Monday first, Sunday last (still
+      // Date#getDay() values under the hood, just reordered for
+      // presentation).
+      WEEKDAY_DISPLAY_ORDER: [1, 2, 3, 4, 5, 6, 0],
 
-  // Snap a duration-based endAt to the second grid so its countdown
-  // decrements in phase with other timers instead of drifting by the
-  // sub-second remainder of Date.now() at creation/resume time.
-  function alignEndAtToSecond(ms) {
-    return Math.round(ms / 1000) * 1000;
-  }
+      // Comma-joined weekday names (Monday-first) for a "time" mode
+      // timer's daysOfWeek restriction, or "" when unrestricted
+      // (fires every day).
+      daysOfWeekLabel(daysOfWeek) {
+        if (!daysOfWeek || !daysOfWeek.length) return "";
+        const order = new Set(daysOfWeek);
+        return Clock.WEEKDAY_DISPLAY_ORDER.filter((d) => order.has(d))
+          .map((d) => Clock.WEEKDAY_LABELS[d])
+          .join(", ");
+      },
 
-  // Resolve the end time for (re)starting a timer, branching on its mode.
+      // Resolve "HH:MM" or "HH:MM:SS" to the next occurrence of that
+      // time (today if it hasn't passed yet, otherwise tomorrow),
+      // further restricted to daysOfWeek if given. Seconds are
+      // optional and default to 0.
+      computeNextTimeBasedEndAt(timeStr, now = Date.now(), daysOfWeek) {
+        const m = String(timeStr || "").match(
+          /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/,
+        );
+        if (!m) return null;
+
+        const hh = Number(m[1]);
+        const mm = Number(m[2]);
+        const ss = m[3] ? Number(m[3]) : 0;
+        const d = new Date(now);
+        d.setHours(hh, mm, ss, 0);
+
+        let target = d.getTime();
+        if (target <= now) target += 24 * 60 * 60 * 1000;
+
+        return advanceToAllowedDay(target, daysOfWeek);
+      },
+    };
+  })();
+
+  // Elapsed-time-span concerns: parsing and formatting a duration
+  // (milliseconds), for "duration" mode timers.
+  const Duration = (() => {
+    return {
+      humanize(ms) {
+        ms = Math.max(0, Math.round(ms));
+        const totalSec = Math.floor(ms / 1000);
+        const h = Math.floor(totalSec / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = totalSec % 60;
+
+        return `${fmt2(h)}:${fmt2(m)}:${fmt2(s)}`;
+      },
+
+      parseDuration(input) {
+        const s = String(input || "").trim();
+        if (!s) return 0;
+
+        if (/^\d+:\d{1,2}:\d{1,2}$/.test(s)) {
+          const [h, m, sec] = s.split(":").map(Number);
+          return (h * 60 * 60 + m * 60 + sec) * 1000;
+        }
+
+        if (/^\d+:\d{1,2}$/.test(s)) {
+          const [m, sec] = s.split(":").map(Number);
+          return (m * 60 + sec) * 1000;
+        }
+
+        if (/^\d+(?:\.\d+)?$/.test(s)) {
+          // treat as minutes (allow decimals)
+          return Math.round(parseFloat(s) * 60 * 1000);
+        }
+
+        // allow short units like 1h, 90s, 500ms, 2d
+        const m = s.match(/^(\d+(?:\.\d+)?)(ms|s|m|h|d)$/i);
+        if (m) {
+          const v = parseFloat(m[1]);
+          const unit = m[2].toLowerCase();
+
+          if (unit === "ms") return Math.max(0, Math.round(v));
+          if (unit === "s") return Math.round(v * 1000);
+          if (unit === "m") return Math.round(v * 60 * 1000);
+          if (unit === "h") return Math.round(v * 3600 * 1000);
+          if (unit === "d") return Math.round(v * 86400 * 1000);
+        }
+
+        return 0;
+      },
+
+      // Snap a duration-based endAt to the second grid so its
+      // countdown decrements in phase with other timers instead of
+      // drifting by the sub-second remainder of Date.now() at
+      // creation/resume time.
+      alignEndAtToSecond(ms) {
+        return Math.round(ms / 1000) * 1000;
+      },
+
+      formatDurationLabel(ms) {
+        const totalSec = Math.round(Math.max(0, ms) / 1000);
+        const d = Math.floor(totalSec / 86400);
+        const h = Math.floor((totalSec % 86400) / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = totalSec % 60;
+
+        const parts = [];
+        if (d) parts.push(`${d}d`);
+        if (h) parts.push(`${h}h`);
+        if (m) parts.push(`${m}m`);
+        if (s || parts.length === 0) parts.push(`${s}s`);
+
+        return parts.join(" ");
+      },
+
+      // Render a duration back into an editable "H:MM:SS" / "MM:SS"
+      // string (rather than formatDurationLabel's "1h 5m" form) so it
+      // round-trips exactly through parseDuration when an edit is
+      // saved unchanged.
+      durationToEditableString(ms) {
+        const totalSec = Math.round(Math.max(0, ms) / 1000);
+        const h = Math.floor(totalSec / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = totalSec % 60;
+
+        return h > 0 ? `${h}:${fmt2(m)}:${fmt2(s)}` : `${m}:${fmt2(s)}`;
+      },
+    };
+  })();
+
+  // Resolve the end time for (re)starting a timer, branching on its
+  // mode — the one place duration-mode and time-mode logic meet, so it
+  // isn't owned by either Duration or Clock.
   function computeRestartEndAt(t, now = Date.now()) {
     if (t.mode === "time") {
-      return computeNextTimeBasedEndAt(t.targetTime, now, t.daysOfWeek);
+      return Clock.computeNextTimeBasedEndAt(t.targetTime, now, t.daysOfWeek);
     }
 
-    return alignEndAtToSecond(now + t.originalDuration);
+    return Duration.alignEndAtToSecond(now + t.originalDuration);
   }
 
-  function humanize(ms) {
-    ms = Math.max(0, Math.round(ms));
-    const totalSec = Math.floor(ms / 1000);
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    const s = totalSec % 60;
-
-    return `${fmt2(h)}:${fmt2(m)}:${fmt2(s)}`;
-  }
-
-  function formatDurationLabel(ms) {
-    const totalSec = Math.round(Math.max(0, ms) / 1000);
-    const d = Math.floor(totalSec / 86400);
-    const h = Math.floor((totalSec % 86400) / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    const s = totalSec % 60;
-
-    const parts = [];
-    if (d) parts.push(`${d}d`);
-    if (h) parts.push(`${h}h`);
-    if (m) parts.push(`${m}m`);
-    if (s || parts.length === 0) parts.push(`${s}s`);
-
-    return parts.join(" ");
-  }
-
-  // Render a duration back into an editable "H:MM:SS" / "MM:SS" string
-  // (rather than formatDurationLabel's "1h 5m" form) so it round-trips
-  // exactly through parseDuration when an edit is saved unchanged.
-  function durationToEditableString(ms) {
-    const totalSec = Math.round(Math.max(0, ms) / 1000);
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    const s = totalSec % 60;
-
-    return h > 0 ? `${h}:${fmt2(m)}:${fmt2(s)}` : `${m}:${fmt2(s)}`;
-  }
+  // Hot-path aliases: called inline in ActiveRow/TrashRow templates many
+  // times per render, so kept unprefixed here for readability there —
+  // Clock/Duration themselves still own the full time/duration API
+  // surface. humanize is called just as often but deliberately excluded:
+  // unlike these two, its name alone doesn't convey what it does without
+  // the Duration. prefix for context.
+  const toTime = Clock.toTime;
+  const toDateWithWeekday = Clock.toDateWithWeekday;
 
   // The target time for "time" mode, or the configured duration for
   // "duration" mode — the plain configured value, with no
@@ -268,7 +307,9 @@
   // "Set" column in Archive/Trash, which has no room to spare for a
   // day list on top of it.
   function formatTimerLabel(t) {
-    if (t.mode !== "time") return formatDurationLabel(t.originalDuration);
+    if (t.mode !== "time") {
+      return Duration.formatDurationLabel(t.originalDuration);
+    }
 
     const targetTime = String(t.targetTime).replace(
       /^(\d{1,2}:\d{2}):00$/,
@@ -283,7 +324,7 @@
   // mode badge's tooltip.
   function formatFallbackTitle(t) {
     const label = formatTimerLabel(t);
-    const days = t.mode === "time" ? daysOfWeekLabel(t.daysOfWeek) : "";
+    const days = t.mode === "time" ? Clock.daysOfWeekLabel(t.daysOfWeek) : "";
     return days ? `${days} ${label}` : label;
   }
 
@@ -419,10 +460,10 @@
   // visible even when a title hides the fallback label.
   function modeBadge(t) {
     const isTime = t.mode === "time";
-    const days = isTime ? daysOfWeekLabel(t.daysOfWeek) : "";
+    const days = isTime ? Clock.daysOfWeekLabel(t.daysOfWeek) : "";
     const label = isTime
       ? `At time: ${formatTimerLabel(t)}${days ? ` — ${days}` : ""}`
-      : `Duration: ${formatDurationLabel(t.originalDuration)}`;
+      : `Duration: ${Duration.formatDurationLabel(t.originalDuration)}`;
 
     return html`
       <span class="mode-badge" data-tooltip="${label}" aria-label="${label}">
@@ -704,7 +745,7 @@
         value:
           t.mode === "time"
             ? t.targetTime
-            : durationToEditableString(t.originalDuration),
+            : Duration.durationToEditableString(t.originalDuration),
         daysOfWeek: t.daysOfWeek,
       };
 
@@ -742,7 +783,7 @@
                 role="group"
                 aria-label="Days of week (optional; none = every day)"
               >
-                ${WEEKDAY_DISPLAY_ORDER.map(
+                ${Clock.WEEKDAY_DISPLAY_ORDER.map(
                   (day) => html`
                     <input
                       type="checkbox"
@@ -751,7 +792,7 @@
                       ${draft.daysOfWeek?.includes(day) ? "checked" : ""}
                     />
                     <label for="edit-day-${t.id}-${day}">
-                      ${WEEKDAY_LABELS[day]}
+                      ${Clock.WEEKDAY_LABELS[day]}
                     </label>
                   `,
                 ).join("")}
@@ -809,7 +850,11 @@
       if (t.mode === "time") {
         const targetTime = valueInput.value;
         const daysOfWeek = readDaysOfWeek(row);
-        const endAt = computeNextTimeBasedEndAt(targetTime, now, daysOfWeek);
+        const endAt = Clock.computeNextTimeBasedEndAt(
+          targetTime,
+          now,
+          daysOfWeek,
+        );
 
         if (!targetTime || endAt == null) {
           alert("Enter a valid time (HH:MM or HH:MM:SS).");
@@ -824,7 +869,7 @@
           t.snoozed = false;
         }
       } else {
-        const dur = parseDuration(valueInput.value);
+        const dur = Duration.parseDuration(valueInput.value);
 
         if (!dur || dur <= 0) {
           alert("Enter duration as mm:ss or minutes (number).");
@@ -922,7 +967,7 @@
           value:
             t.mode === "time"
               ? t.targetTime
-              : durationToEditableString(t.originalDuration),
+              : Duration.durationToEditableString(t.originalDuration),
           daysOfWeek: t.daysOfWeek,
         };
       }
@@ -985,20 +1030,20 @@
     // Apply a snooze form's current input value to `t`. Returns
     // false (leaving the form open) if the value doesn't parse to a
     // positive duration — same mm:ss / minutes / 1h / 30s / 2d
-    // format as the Duration mode field, via parseDuration().
+    // format as the Duration mode field, via Duration.parseDuration().
     // Deliberately doesn't touch originalDuration/targetTime, so a
     // later Restart still uses the timer's original setting rather
     // than the snoozed length.
     save(row, t) {
       const valueInput = $(".snooze-value", row);
-      const dur = parseDuration(valueInput.value);
+      const dur = Duration.parseDuration(valueInput.value);
 
       if (!dur || dur <= 0) {
         alert("Enter snooze duration as mm:ss or minutes (number).");
         return false;
       }
 
-      t.endAt = alignEndAtToSecond(Date.now() + dur);
+      t.endAt = Duration.alignEndAtToSecond(Date.now() + dur);
       t.notified = false;
       t.snoozed = true;
 
@@ -1099,7 +1144,7 @@
         statusClass = "ok";
       }
 
-      const crossDay = !t.paused && !isSameDay(t.endAt, now);
+      const crossDay = !t.paused && !Clock.isSameDay(t.endAt, now);
 
       return {
         remaining,
@@ -1236,7 +1281,9 @@
                   >
                     ${t.paused ? "--:--:--" : toTime(t.endAt)}
                   </div>
-                  <div class="remain">${humanize(clamp0(vm.remaining))}</div>
+                  <div class="remain">
+                    ${Duration.humanize(clamp0(vm.remaining))}
+                  </div>
                 </div>
                 <div
                   class="status ${vm.statusClass}"
@@ -1362,12 +1409,12 @@
 
         if (t.paused) {
           setStatus(vm.statusText, vm.statusClass);
-          remainEl.textContent = humanize(clamp0(vm.remaining));
+          remainEl.textContent = Duration.humanize(clamp0(vm.remaining));
         } else if (vm.done) {
           setStatus(vm.statusText, vm.statusClass);
-          remainEl.textContent = humanize(0);
+          remainEl.textContent = Duration.humanize(0);
         } else {
-          remainEl.textContent = humanize(vm.remaining);
+          remainEl.textContent = Duration.humanize(vm.remaining);
         }
       },
     };
@@ -1441,7 +1488,7 @@
             ${tagsHtml(t)}
           </div>
           <div class="set">${formatTimerLabel(t)}</div>
-          <div class="remain">${humanize(purgesIn(t, now))}</div>
+          <div class="remain">${Duration.humanize(purgesIn(t, now))}</div>
           <div class="controls">
             <button
               class="accent"
@@ -1457,7 +1504,7 @@
       },
 
       patch(row, t, now) {
-        $(".remain", row).textContent = humanize(purgesIn(t, now));
+        $(".remain", row).textContent = Duration.humanize(purgesIn(t, now));
       },
     };
   })();
@@ -1502,7 +1549,7 @@
       targetTime: t.targetTime,
       daysOfWeek: t.daysOfWeek,
       tags: t.tags || [],
-      deletedAt: alignEndAtToSecond(Date.now()),
+      deletedAt: Duration.alignEndAtToSecond(Date.now()),
     });
   }
 
@@ -1712,14 +1759,14 @@
     if (mode === "time") {
       targetTime = targetTimeInputEl.value;
       daysOfWeek = readDaysOfWeek($("#timer-form"));
-      endAt = computeNextTimeBasedEndAt(targetTime, now, daysOfWeek);
+      endAt = Clock.computeNextTimeBasedEndAt(targetTime, now, daysOfWeek);
 
       if (!targetTime || endAt == null) {
         alert("Enter a valid time (HH:MM or HH:MM:SS).");
         return;
       }
     } else {
-      const dur = parseDuration($("#duration").value);
+      const dur = Duration.parseDuration($("#duration").value);
 
       if (!dur || dur <= 0) {
         alert("Enter duration as mm:ss or minutes (number).");
@@ -1727,7 +1774,7 @@
       }
 
       originalDuration = dur;
-      endAt = alignEndAtToSecond(now + dur);
+      endAt = Duration.alignEndAtToSecond(now + dur);
     }
 
     timers.push({
@@ -1789,7 +1836,7 @@
     resume(t) {
       const now = Date.now();
       t.paused = false;
-      t.endAt = alignEndAtToSecond(now + (t.remainingAtPause || 0));
+      t.endAt = Duration.alignEndAtToSecond(now + (t.remainingAtPause || 0));
       t.notified = false;
       delete t.pausedAt;
       delete t.remainingAtPause;
@@ -1816,7 +1863,11 @@
     // just adding 24h keeps the skip aligned to the actual target
     // time even mid-snooze.
     skip(t) {
-      t.endAt = computeNextTimeBasedEndAt(t.targetTime, t.endAt, t.daysOfWeek);
+      t.endAt = Clock.computeNextTimeBasedEndAt(
+        t.targetTime,
+        t.endAt,
+        t.daysOfWeek,
+      );
       t.snoozed = false;
       Storage.save();
       renderActive();
