@@ -336,141 +336,160 @@
   // accent/warn/danger/neutral colors; .status.ok/.paused/.done/
   // .snoozed too),
   // so call sites never need to pick a color themselves.
-  const STROKE_ICON_PATHS = {
-    "refresh-cw": html`
-      <polyline points="23 4 23 10 17 10"></polyline>
-      <polyline points="1 20 1 14 7 14"></polyline>
-      <path
-        d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
-      ></path>
-    `,
-    play: html`<polygon points="5 3 19 12 5 21 5 3"></polygon> `,
-    pause: html`
-      <rect x="6" y="4" width="4" height="16"></rect>
-      <rect x="14" y="4" width="4" height="16"></rect>
-    `,
-    "skip-forward": html`
-      <polygon points="5 4 15 12 5 20 5 4"></polygon>
-      <line x1="19" y1="5" x2="19" y2="19"></line>
-    `,
-    archive: html`
-      <polyline points="21 8 21 21 3 21 3 8"></polyline>
-      <rect x="1" y="3" width="22" height="5"></rect>
-      <line x1="10" y1="12" x2="14" y2="12"></line>
-    `,
-    trash: html`
-      <line x1="2" y1="6" x2="22" y2="6"></line>
-      <path d="M9 6V2a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4"></path>
-      <path d="M4 6l1 14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2l1-14"></path>
-      <line x1="10" y1="10" x2="10" y2="18"></line>
-      <line x1="14" y1="10" x2="14" y2="18"></line>
-    `,
-    "corner-up-left": html`
-      <polyline points="9 14 4 9 9 4"></polyline>
-      <path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>
-    `,
-    edit: html`
-      <path d="M12 20h9"></path>
-      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-    `,
-    check: html`<polyline points="20 6 9 17 4 12"></polyline>`,
-    x: html`
-      <line x1="18" y1="6" x2="6" y2="18"></line>
-      <line x1="6" y1="6" x2="18" y2="18"></line>
-    `,
-    clock: html`
-      <circle cx="12" cy="12" r="10"></circle>
-      <polyline points="12 6 12 12 16 14"></polyline>
-    `,
-    hourglass: html`
-      <path
-        d="M6 3h12M6 21h12M7 3Q7 10 12 12Q7 14 7 21M17 3Q17 10 12 12Q17 14 17 21"
-      ></path>
-    `,
-    "chevron-down": html`<polyline points="6 9 12 15 18 9"></polyline>`,
-    "chevron-up": html`<polyline points="18 15 12 9 6 15"></polyline>`,
-    "clock-plus": html`
-      <path d="M20.5 12A9.5 9.5 0 1 1 11 2.5"></path>
-      <polyline points="11 8 11 12 14.5 14"></polyline>
-      <line x1="17.7" y1="2.5" x2="17.7" y2="8.1"></line>
-      <line x1="14.9" y1="5.3" x2="20.5" y2="5.3"></line>
-    `,
-  };
+  // Icon rendering: inline stroked SVGs for row-action buttons, plus the
+  // compact status dot and the Duration/Time mode badge built from them.
+  const Icons = (() => {
+    const STROKE_ICON_PATHS = {
+      "refresh-cw": html`
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <polyline points="1 20 1 14 7 14"></polyline>
+        <path
+          d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
+        ></path>
+      `,
+      play: html`<polygon points="5 3 19 12 5 21 5 3"></polygon> `,
+      pause: html`
+        <rect x="6" y="4" width="4" height="16"></rect>
+        <rect x="14" y="4" width="4" height="16"></rect>
+      `,
+      "skip-forward": html`
+        <polygon points="5 4 15 12 5 20 5 4"></polygon>
+        <line x1="19" y1="5" x2="19" y2="19"></line>
+      `,
+      archive: html`
+        <polyline points="21 8 21 21 3 21 3 8"></polyline>
+        <rect x="1" y="3" width="22" height="5"></rect>
+        <line x1="10" y1="12" x2="14" y2="12"></line>
+      `,
+      trash: html`
+        <line x1="2" y1="6" x2="22" y2="6"></line>
+        <path d="M9 6V2a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4"></path>
+        <path d="M4 6l1 14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2l1-14"></path>
+        <line x1="10" y1="10" x2="10" y2="18"></line>
+        <line x1="14" y1="10" x2="14" y2="18"></line>
+      `,
+      "corner-up-left": html`
+        <polyline points="9 14 4 9 9 4"></polyline>
+        <path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>
+      `,
+      edit: html`
+        <path d="M12 20h9"></path>
+        <path
+          d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
+        ></path>
+      `,
+      check: html`<polyline points="20 6 9 17 4 12"></polyline>`,
+      x: html`
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      `,
+      clock: html`
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="12 6 12 12 16 14"></polyline>
+      `,
+      hourglass: html`
+        <path
+          d="M6 3h12M6 21h12M7 3Q7 10 12 12Q7 14 7 21M17 3Q17 10 12 12Q17 14 17 21"
+        ></path>
+      `,
+      "chevron-down": html`<polyline points="6 9 12 15 18 9"></polyline>`,
+      "chevron-up": html`<polyline points="18 15 12 9 6 15"></polyline>`,
+      "clock-plus": html`
+        <path d="M20.5 12A9.5 9.5 0 1 1 11 2.5"></path>
+        <polyline points="11 8 11 12 14.5 14"></polyline>
+        <line x1="17.7" y1="2.5" x2="17.7" y2="8.1"></line>
+        <line x1="14.9" y1="5.3" x2="20.5" y2="5.3"></line>
+      `,
+    };
 
-  function icon(name, size = 18) {
-    if (name === "circle") {
-      return html`
-        <svg
-          viewBox="0 0 24 24"
-          width="${size}"
-          height="${size}"
-          fill="currentColor"
-        >
-          <circle cx="12" cy="12" r="10"></circle>
-        </svg>
-      `;
-    }
+    return {
+      icon(name, size = 18) {
+        if (name === "circle") {
+          return html`
+            <svg
+              viewBox="0 0 24 24"
+              width="${size}"
+              height="${size}"
+              fill="currentColor"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+            </svg>
+          `;
+        }
 
-    // "More actions" row-menu toggle: three filled dots read better
-    // than the stroked-outline treatment used for the other icons.
-    if (name === "more-vertical") {
-      return html`
-        <svg
-          viewBox="0 0 24 24"
-          width="${size}"
-          height="${size}"
-          fill="currentColor"
-        >
-          <circle cx="12" cy="5" r="1.5"></circle>
-          <circle cx="12" cy="12" r="1.5"></circle>
-          <circle cx="12" cy="19" r="1.5"></circle>
-        </svg>
-      `;
-    }
+        // "More actions" row-menu toggle: three filled dots read better
+        // than the stroked-outline treatment used for the other icons.
+        if (name === "more-vertical") {
+          return html`
+            <svg
+              viewBox="0 0 24 24"
+              width="${size}"
+              height="${size}"
+              fill="currentColor"
+            >
+              <circle cx="12" cy="5" r="1.5"></circle>
+              <circle cx="12" cy="12" r="1.5"></circle>
+              <circle cx="12" cy="19" r="1.5"></circle>
+            </svg>
+          `;
+        }
 
-    return html`
-      <svg
-        viewBox="0 0 24 24"
-        width="${size}"
-        height="${size}"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        ${STROKE_ICON_PATHS[name]}
-      </svg>
-    `;
-  }
+        return html`
+          <svg
+            viewBox="0 0 24 24"
+            width="${size}"
+            height="${size}"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            ${STROKE_ICON_PATHS[name]}
+          </svg>
+        `;
+      },
 
-  // Compact status glyph shown at narrow widths (kept visually distinct
-  // from the Actions icons: a plain dot, not a shape like play/pause).
-  // Color comes from the wrapping .status.ok/.paused/.done/.snoozed
-  // class, so
-  // the dot itself doesn't need to branch on statusText.
-  function statusIconFor(statusText) {
-    return icon("circle", 14);
-  }
+      // Compact status glyph shown at narrow widths (kept visually
+      // distinct from the Actions icons: a plain dot, not a shape like
+      // play/pause). Color comes from the wrapping
+      // .status.ok/.paused/.done/.snoozed class, so the dot itself
+      // doesn't need to branch on statusText.
+      statusIconFor(statusText) {
+        return Icons.icon("circle", 14);
+      },
 
-  // Small badge indicating whether a timer was set by duration or by
-  // a target clock time. Tooltip shows the concrete value (e.g. the
-  // original duration, or the originally configured target time —
-  // the latter matters once Snooze can push endAt past it) so it's
-  // visible even when a title hides the fallback label.
-  function modeBadge(t) {
-    const isTime = t.mode === "time";
-    const days = isTime ? Clock.daysOfWeekLabel(t.daysOfWeek) : "";
-    const label = isTime
-      ? `At time: ${formatTimerLabel(t)}${days ? ` — ${days}` : ""}`
-      : `Duration: ${Duration.formatDurationLabel(t.originalDuration)}`;
+      // Small badge indicating whether a timer was set by duration or
+      // by a target clock time. Tooltip shows the concrete value (e.g.
+      // the original duration, or the originally configured target
+      // time — the latter matters once Snooze can push endAt past it)
+      // so it's visible even when a title hides the fallback label.
+      modeBadge(t) {
+        const isTime = t.mode === "time";
+        const days = isTime ? Clock.daysOfWeekLabel(t.daysOfWeek) : "";
+        const label = isTime
+          ? `At time: ${formatTimerLabel(t)}${days ? ` — ${days}` : ""}`
+          : `Duration: ${Duration.formatDurationLabel(t.originalDuration)}`;
 
-    return html`
-      <span class="mode-badge" data-tooltip="${label}" aria-label="${label}">
-        ${isTime ? icon("clock", 14) : icon("hourglass", 14)}
-      </span>
-    `;
-  }
+        return html`
+          <span
+            class="mode-badge"
+            data-tooltip="${label}"
+            aria-label="${label}"
+          >
+            ${isTime ? Icons.icon("clock", 14) : Icons.icon("hourglass", 14)}
+          </span>
+        `;
+      },
+    };
+  })();
+
+  // Hot-path aliases: icon() is called inline in row/form templates
+  // dozens of times per render, and modeBadge() a handful of times —
+  // Icons itself still owns the full API surface. statusIconFor isn't
+  // aliased: it has only two call sites, nothing surprising to explain.
+  const icon = Icons.icon;
+  const modeBadge = Icons.modeBadge;
 
   /*** Sound ***/
   let audioCtx = null;
@@ -1291,7 +1310,7 @@
                   data-tooltip="${vm.statusText}"
                 >
                   <span class="status-icon" aria-hidden="true">
-                    ${statusIconFor(vm.statusText)}
+                    ${Icons.statusIconFor(vm.statusText)}
                   </span>
                   <span class="status-text" aria-hidden="true">
                     ${vm.statusText}
@@ -1401,7 +1420,7 @@
         function setStatus(text, statusClass) {
           statusEl.setAttribute("aria-label", text);
           statusEl.setAttribute("data-tooltip", text);
-          statusIconEl.innerHTML = statusIconFor(text);
+          statusIconEl.innerHTML = Icons.statusIconFor(text);
           statusTextEl.textContent = text;
           statusEl.classList.remove("ok", "paused", "done", "snoozed");
           statusEl.classList.add(statusClass);
