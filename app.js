@@ -2245,9 +2245,12 @@
     $("#title").focus();
   });
 
-  // Actions available on an Active-list row, dispatched by data-act
-  // from the click handler below.
+  /**
+   * Actions available on an Active-list row, dispatched by data-act
+   * from the click handler below.
+   */
   const ActiveActions = {
+    /** @param {ActiveTimer} t */
     delete(t) {
       timers = timers.filter((x) => x.id !== t.id);
       moveToTrash(t);
@@ -2256,6 +2259,7 @@
       renderTrash();
     },
 
+    /** @param {ActiveTimer} t */
     archive(t) {
       timers = timers.filter((x) => x.id !== t.id);
       moveToArchive(t);
@@ -2264,6 +2268,7 @@
       renderArchived();
     },
 
+    /** @param {ActiveTimer} t */
     pause(t) {
       const now = Date.now();
       t.paused = true;
@@ -2273,6 +2278,7 @@
       renderActive();
     },
 
+    /** @param {ActiveTimer} t */
     resume(t) {
       const now = Date.now();
       t.paused = false;
@@ -2284,6 +2290,7 @@
       renderActive();
     },
 
+    /** @param {ActiveTimer} t */
     restart(t) {
       const now = Date.now();
       t.endAt = computeRestartEndAt(t, now);
@@ -2297,11 +2304,15 @@
       renderActive();
     },
 
-    // While snoozed, t.endAt holds the snooze re-fire time rather
-    // than an on-schedule target-time instant, so re-deriving from
-    // t.targetTime (anchored to t.endAt's calendar day) rather than
-    // just adding 24h keeps the skip aligned to the actual target
-    // time even mid-snooze.
+    /**
+     * While snoozed, t.endAt holds the snooze re-fire time rather than
+     * an on-schedule target-time instant, so re-deriving from
+     * t.targetTime (anchored to t.endAt's calendar day) rather than
+     * just adding 24h keeps the skip aligned to the actual target time
+     * even mid-snooze.
+     *
+     * @param {ActiveTimer} t
+     */
     skip(t) {
       t.endAt = Clock.computeNextTimeBasedEndAt(
         t.targetTime,
@@ -2313,6 +2324,7 @@
       renderActive();
     },
 
+    /** @param {number} id */
     startEdit(id) {
       editingId = id;
       editDraft = null;
@@ -2328,6 +2340,10 @@
       renderActive();
     },
 
+    /**
+     * @param {Element} row
+     * @param {ActiveTimer} t
+     */
     saveEdit(row, t) {
       if (EditForm.apply(row, t)) {
         Storage.save();
@@ -2335,6 +2351,7 @@
       }
     },
 
+    /** @param {number} id */
     startSnooze(id) {
       snoozingId = id;
       snoozeDraft = null;
@@ -2350,6 +2367,10 @@
       renderActive();
     },
 
+    /**
+     * @param {Element} row
+     * @param {ActiveTimer} t
+     */
     confirmSnooze(row, t) {
       if (SnoozeForm.save(row, t)) {
         Storage.save();
@@ -2357,6 +2378,7 @@
       }
     },
 
+    /** @param {Element} button */
     toggleMenu(button) {
       const menu = button.closest(".row-menu");
       const isOpen = menu?.classList.toggle("open");
@@ -2438,9 +2460,15 @@
     });
   });
 
-  // Rebuilds a fresh Active timer entry from a Trash or Archived
-  // item — shared by restoreFromTrash and restartFromArchive, which
-  // otherwise duplicate this exact object shape.
+  /**
+   * Rebuilds a fresh Active timer entry from a Trash or Archived item
+   * — shared by restoreFromTrash and restartFromArchive, which
+   * otherwise duplicate this exact object shape.
+   *
+   * @param {TrashTimer | ArchivedTimer} t
+   * @param {number} now
+   * @returns {ActiveTimer}
+   */
   function reviveTimer(t, now) {
     return {
       id: seq++,
@@ -2458,9 +2486,12 @@
     };
   }
 
-  // Actions available on a Trash-list row, dispatched by data-act
-  // from the click handler below.
+  /**
+   * Actions available on a Trash-list row, dispatched by data-act
+   * from the click handler below.
+   */
   const TrashActions = {
+    /** @param {TrashTimer} t */
     restore(t) {
       trash = trash.filter((x) => x.id !== t.id);
       timers.push(reviveTimer(t, Date.now()));
@@ -2492,9 +2523,12 @@
     }
   });
 
-  // Actions available on an Archived-list row, dispatched by
-  // data-act from the click handler below.
+  /**
+   * Actions available on an Archived-list row, dispatched by
+   * data-act from the click handler below.
+   */
   const ArchiveActions = {
+    /** @param {ArchivedTimer} t */
     restart(t) {
       archived = archived.filter((x) => x.id !== t.id);
       timers.push(reviveTimer(t, Date.now()));
@@ -2503,6 +2537,7 @@
       renderArchived();
     },
 
+    /** @param {ArchivedTimer} t */
     delete(t) {
       archived = archived.filter((x) => x.id !== t.id);
       moveToTrash(t);
@@ -2511,6 +2546,7 @@
       renderTrash();
     },
 
+    /** @param {number} id */
     startEdit(id) {
       editingId = id;
       editDraft = null;
@@ -2524,6 +2560,10 @@
       renderArchived();
     },
 
+    /**
+     * @param {Element} row
+     * @param {ArchivedTimer} t
+     */
     saveEdit(row, t) {
       if (EditForm.apply(row, t)) {
         Storage.save();
