@@ -2632,10 +2632,14 @@
     }
   });
 
-  // Update remaining times & detect completion.
-  // Reschedule via setTimeout so a slow tick doesn't queue up back-to-back runs like setInterval would.
-  // The delay is computed dynamically: fire right after the soonest displayed-second boundary
-  // among all active timers/trash rows, instead of polling at a fixed interval.
+  /**
+   * Delay in ms until the next tick should run: just past the soonest
+   * displayed-second boundary among all active timers/trash rows,
+   * instead of polling at a fixed interval.
+   *
+   * @param {number} now
+   * @returns {number}
+   */
   function computeNextTickDelay(now) {
     let minDelay = null;
 
@@ -2659,10 +2663,18 @@
     return (minDelay === null ? 1000 : minDelay) + 10; // +10ms margin against early firing
   }
 
+  /**
+   * Reschedules `tick` via `setTimeout` so a slow tick can't queue up
+   * back-to-back runs the way `setInterval` would.
+   */
   function scheduleTick() {
     setTimeout(tick, computeNextTickDelay(Date.now()));
   }
 
+  /**
+   * Updates remaining times and detects completion for the current
+   * tick, then reschedules the next one via `scheduleTick`.
+   */
   function tick() {
     let changed = false;
     const now = Date.now();
