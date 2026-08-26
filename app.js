@@ -1972,11 +1972,17 @@
   const archiveHeaderEl = $("#archive-header");
   const archiveTagFilterEl = $("#archive-tag-filter");
 
-  // Builds a single Archived row's markup. Archived rows have no live
-  // countdown, so unlike ActiveRow/TrashRow there's no tick()-side
-  // patch step — renderArchived() rebuilding on any structural change
-  // is enough.
+  /**
+   * Builds a single Archived row's markup. Archived rows have no live
+   * countdown, so unlike ActiveRow/TrashRow there's no tick()-side
+   * patch step — renderArchived() rebuilding on any structural change
+   * is enough.
+   */
   const ArchivedRow = {
+    /**
+     * @param {ArchivedTimer} t
+     * @returns {string}
+     */
     html(t) {
       return html`
         <div class="title">
@@ -2024,6 +2030,7 @@
     },
   };
 
+  /** Fully rebuilds the Archived list (`#archive-list`) from `archived`. */
   function renderArchived() {
     TagFilter.renderChips(
       archiveTagFilterEl,
@@ -2062,6 +2069,11 @@
     }
   }
 
+  /**
+   * Appends `t` to `archived` as a new `ArchivedTimer`.
+   *
+   * @param {ActiveTimer} t
+   */
   function moveToArchive(t) {
     archived.push({
       id: t.id,
@@ -2075,6 +2087,12 @@
     });
   }
 
+  /**
+   * Toggles the `.stuck` class (drop shadow + translucent background)
+   * on the add-timer form once it sticks to the top of the viewport
+   * while scrolling, via an IntersectionObserver watching a sentinel
+   * element placed just above it.
+   */
   function setupStickyFormShadow() {
     const sentinel = $(".sticky-sentinel");
     const form = $(".sticky-form");
