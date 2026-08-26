@@ -2114,13 +2114,18 @@
   const durationInputEl = $("#duration");
   const targetTimeInputEl = $("#target-time");
 
-  // Read the checked days from a .weekday-toggle-row's checkboxes
-  // within `container`, returning undefined (meaning "every day")
-  // when none *or all* are checked — selecting every day is the same
-  // restriction as selecting none, so it's normalized the same way
-  // rather than showing as a (redundant) 7-day restriction elsewhere.
-  // Shared by the add-timer form and the inline edit row, both of
-  // which render one .weekday-toggle-row.
+  /**
+   * Read the checked days from a .weekday-toggle-row's checkboxes
+   * within `container`, returning undefined (meaning "every day") when
+   * none *or all* are checked — selecting every day is the same
+   * restriction as selecting none, so it's normalized the same way
+   * rather than showing as a (redundant) 7-day restriction elsewhere.
+   * Shared by the add-timer form and the inline edit row, both of
+   * which render one .weekday-toggle-row.
+   *
+   * @param {ParentNode} container
+   * @returns {number[]|undefined}
+   */
   function readDaysOfWeek(container) {
     const days = [
       ...container.querySelectorAll(
@@ -2130,9 +2135,14 @@
     return days.length && days.length < 7 ? days : undefined;
   }
 
-  // Set a .weekday-toggle-row's checkboxes within `container` to
-  // reflect `daysOfWeek` (undefined/empty checks none, meaning
-  // "every day").
+  /**
+   * Set a .weekday-toggle-row's checkboxes within `container` to
+   * reflect `daysOfWeek` (undefined/empty checks none, meaning "every
+   * day").
+   *
+   * @param {ParentNode} container
+   * @param {number[]} [daysOfWeek]
+   */
   function setDaysOfWeekCheckboxes(container, daysOfWeek) {
     const set = new Set(daysOfWeek || []);
     container
@@ -2142,6 +2152,11 @@
       });
   }
 
+  /**
+   * Shows the Duration or At-time fields (and toggles their `required`
+   * attributes) to match the currently-selected mode radio, then
+   * refocuses the title field.
+   */
   function updateModeFieldsVisibility() {
     const isTime = $('input[name="mode"]:checked').value === "time";
     durationFieldEl.style.display = isTime ? "none" : "";
