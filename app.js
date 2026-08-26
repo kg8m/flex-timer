@@ -1326,13 +1326,44 @@
     }
 
     /**
+     * Signed counterpart to Duration.parseDuration() — strips a
+     * leading "-" before delegating, then negates the result. Only
+     * used for the still-counting-down branch of save() below, where
+     * a negative amount shortens the run; the already-Done branch
+     * always wants a positive "N minutes from now" and uses
+     * Duration.parseDuration() directly, since that's also the
+     * shared duration grammar used by timer creation and Edit (which
+     * must stay positive-only).
+     *
+     * @param {string} input
+     * @returns {number} ms, negative allowed; 0 if `input` doesn't parse.
+     */
+    function parseSignedDuration(input) {
+      const s = String(input || "").trim();
+      const negative = s.startsWith("-");
+      const dur = Duration.parseDuration(negative ? s.slice(1) : s);
+      return dur ? (negative ? -dur : dur) : 0;
+    }
+
+    /**
      * Apply a snooze form's current input value to `t`. Returns false
-     * (leaving the form open) if the value doesn't parse to a positive
-     * duration — same mm:ss / minutes / 1h / 30s / 2d format as the
-     * Duration mode field, via Duration.parseDuration(). Deliberately
+     * (leaving the form open) if the value doesn't parse. Same mm:ss /
+     * minutes / 1h / 30s / 2d format as the Duration mode field, via
+     * Duration.parseDuration() — plus an optional leading "-" while
+     * still counting down (see parseSignedDuration above). Deliberately
      * doesn't touch originalDuration/targetTime, so a later Restart
      * still uses the timer's original setting rather than the snoozed
      * length.
+     *
+     * While the run is still counting down toward its own completion
+     * (whether or not it's already mid-snooze), the input adjusts that
+     * completion time by the given amount — the natural "extend/shorten
+     * what I'm already looking at" mental model, regardless of whether
+     * this run has ever completed before. Once it's actually Done, there
+     * is no "current completion" left to adjust, so the input instead
+     * sets a fresh one, N from now — the classic alarm-snooze behavior.
+     * No clamping is done if a shorten pushes endAt into the past; the
+     * next tick()/render naturally treats that as Done.
      *
      * @param {Element} row
      * @param {ActiveTimer} t
@@ -1340,14 +1371,24 @@
      */
     function save(row, t) {
       const valueInput = $(".snooze-value", row);
-      const dur = Duration.parseDuration(valueInput.value);
+      const now = Date.now();
+      const stillCountingDown = t.endAt > now;
+      const delta = stillCountingDown
+        ? parseSignedDuration(valueInput.value)
+        : Duration.parseDuration(valueInput.value);
 
-      if (!dur || dur <= 0) {
-        alert("Enter snooze duration as mm:ss or minutes (number).");
+      if (!delta) {
+        alert(
+          stillCountingDown
+            ? "Enter an amount to add, or a negative amount to shorten (mm:ss or minutes)."
+            : "Enter snooze duration as mm:ss or minutes (number).",
+        );
         return false;
       }
 
-      t.endAt = Duration.alignEndAtToSecond(Date.now() + dur);
+      t.endAt = Duration.alignEndAtToSecond(
+        stillCountingDown ? t.endAt + delta : now + delta,
+      );
       t.notified = false;
       t.snoozed = true;
 
@@ -1447,12 +1488,15 @@
       const remaining = t.paused ? t.remainingAtPause || 0 : t.endAt - now;
       const done = remaining <= 0 && !t.paused;
 
-      // Once Done, offer Snooze. Also keep offering it for the rest
-      // of an already-snoozed run (not just once it's Done again) —
-      // otherwise there's no way to shorten a snooze you regret,
-      // since Edit only ever adjusts originalDuration, not this
-      // one-off endAt override.
-      const canSnooze = done || (t.snoozed && !t.paused);
+      // Offered any time the run isn't Paused (a paused run's endAt
+      // isn't live — remaining is frozen in remainingAtPause instead,
+      // so there's nothing for Snooze to adjust). See SnoozeForm.save
+      // for what it does in each case: while still counting down
+      // (Running or already mid-snooze) it adjusts the current
+      // completion time by the entered amount, one-off, without
+      // touching originalDuration/targetTime; once Done it sets a
+      // fresh completion N from now, same as a classic alarm snooze.
+      const canSnooze = !t.paused;
 
       // Restart is normally only offered once a timer is Done (see
       // pauseResumeButton below), but a Duration-mode timer's target is
