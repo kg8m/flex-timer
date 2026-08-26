@@ -504,9 +504,10 @@
     // Compact status glyph shown at narrow widths (kept visually
     // distinct from the Actions icons: a plain dot, not a shape like
     // play/pause). Color comes from the wrapping
-    // .status.ok/.paused/.done/.snoozed class, so the dot itself
-    // doesn't need to branch on statusText.
-    function statusIconFor(statusText) {
+    // .status.ok/.paused/.done/.snoozed class, so this doesn't need to
+    // take the status text/branch on it — every status renders the
+    // same plain dot.
+    function statusIcon() {
       return icon("circle", 14);
     }
 
@@ -529,12 +530,12 @@
       `;
     }
 
-    return { icon, statusIconFor, modeBadge };
+    return { icon, statusIcon, modeBadge };
   })();
 
   // Hot-path aliases: icon() is called inline in row/form templates
   // dozens of times per render, and modeBadge() a handful of times —
-  // Icons itself still owns the full API surface. statusIconFor isn't
+  // Icons itself still owns the full API surface. statusIcon isn't
   // aliased: it has only two call sites, nothing surprising to explain.
   const icon = Icons.icon;
   const modeBadge = Icons.modeBadge;
@@ -544,7 +545,7 @@
   function playBeep(times = 3, freq = 1000, duration = 0.18, gap = 0.08) {
     try {
       if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioCtx = new AudioContext();
       }
 
       const now = audioCtx.currentTime;
@@ -1061,8 +1062,10 @@
   // doesn't need to handle the archived-item shape.
   const SnoozeForm = (() => {
     // Named buildHtml, not html, so it doesn't shadow the outer html
-    // template-tag helper used throughout its own body.
-    function buildHtml(t) {
+    // template-tag helper used throughout its own body. Takes no timer
+    // argument (unlike EditForm.html/ActiveRow.html) — snoozeDraft
+    // fully determines its content.
+    function buildHtml() {
       const draft = snoozeDraft || { value: "5" };
 
       return html`
@@ -1346,7 +1349,7 @@
         // branch.
         const restOfRowHtml =
           t.id === snoozingId
-            ? SnoozeForm.html(t)
+            ? SnoozeForm.html()
             : html`
                 <div class="when-remain">
                   <div
@@ -1367,7 +1370,7 @@
                   data-tooltip="${vm.statusText}"
                 >
                   <span class="status-icon" aria-hidden="true">
-                    ${Icons.statusIconFor(vm.statusText)}
+                    ${Icons.statusIcon()}
                   </span>
                   <span class="status-text" aria-hidden="true">
                     ${vm.statusText}
@@ -1477,7 +1480,7 @@
         function setStatus(text, statusClass) {
           statusEl.setAttribute("aria-label", text);
           statusEl.setAttribute("data-tooltip", text);
-          statusIconEl.innerHTML = Icons.statusIconFor(text);
+          statusIconEl.innerHTML = Icons.statusIcon();
           statusTextEl.textContent = text;
           statusEl.classList.remove("ok", "paused", "done", "snoozed");
           statusEl.classList.add(statusClass);
