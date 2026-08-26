@@ -1417,12 +1417,32 @@
 
   const timersTagFilterEl = $("#timers-tag-filter");
 
-  // Builds and patches a single Active-timer row's markup. html() is
-  // used by renderActive() for a full (re)build of a row; patch() is
-  // used by tick()'s lightweight in-place update. Both go through the
-  // same internal view model, so the two never drift out of sync with
-  // each other the way two independently-written functions could.
+  /**
+   * Builds and patches a single Active-timer row's markup. html() is
+   * used by renderActive() for a full (re)build of a row; patch() is
+   * used by tick()'s lightweight in-place update. Both go through the
+   * same internal view model, so the two never drift out of sync with
+   * each other the way two independently-written functions could.
+   */
   const ActiveRow = (() => {
+    /**
+     * @typedef {object} ActiveRowViewModel
+     * @property {number} remaining - ms remaining; may be negative before clamping.
+     * @property {boolean} done
+     * @property {boolean} canSnooze
+     * @property {boolean} canRestart
+     * @property {string} statusText
+     * @property {string} statusClass
+     * @property {boolean} crossDay - whether Ends At falls on a different day than today.
+     * @property {boolean} paused
+     * @property {"duration"|"time"} mode
+     */
+
+    /**
+     * @param {ActiveTimer} t
+     * @param {number} now - epoch ms.
+     * @returns {ActiveRowViewModel}
+     */
     function computeViewModel(t, now) {
       const remaining = t.paused ? t.remainingAtPause || 0 : t.endAt - now;
       const done = remaining <= 0 && !t.paused;
@@ -1474,11 +1494,24 @@
       };
     }
 
-    // Renders a single row-action button from {act, tooltip, icon,
-    // class}, or "" when spec is null (the action doesn't apply to
-    // this timer). extraClass adds a controls-row-only modifier (e.g.
-    // "wide-action") without affecting the same action's
-    // row-menu-popover rendering.
+    /**
+     * @typedef {object} ActionSpec
+     * @property {string} act - the `data-act` value.
+     * @property {string} tooltip
+     * @property {string} icon - an `Icons.icon()` name.
+     * @property {string} class
+     */
+
+    /**
+     * Renders a single row-action button, or "" when spec is null (the
+     * action doesn't apply to this timer). extraClass adds a
+     * controls-row-only modifier (e.g. "wide-action") without affecting
+     * the same action's row-menu-popover rendering.
+     *
+     * @param {ActionSpec|null} spec
+     * @param {string} [extraClass]
+     * @returns {string}
+     */
     function actionButton(spec, extraClass = "") {
       if (!spec) return "";
 
@@ -1495,9 +1528,14 @@
       `;
     }
 
-    // Unlike restartButton/skipButton/snoozeButton below, this slot's
-    // button isn't a single yes/no condition — it's exactly one of
-    // four mutually exclusive states (Done/Paused/Time mode/default).
+    /**
+     * Unlike restartButton/skipButton/snoozeButton below, this slot's
+     * button isn't a single yes/no condition — it's exactly one of
+     * four mutually exclusive states (Done/Paused/Time mode/default).
+     *
+     * @param {ActiveRowViewModel} vm
+     * @returns {string}
+     */
     function pauseResumeButton(vm) {
       if (vm.done) {
         return actionButton({
@@ -1525,9 +1563,15 @@
       }
     }
 
-    // Called with no extraClass for the row-menu-popover's copy of
-    // this action, and with "wide-action" for the controls-row copy —
-    // same action, just a different layout modifier.
+    /**
+     * Called with no extraClass for the row-menu-popover's copy of
+     * this action, and with "wide-action" for the controls-row copy —
+     * same action, just a different layout modifier.
+     *
+     * @param {ActiveRowViewModel} vm
+     * @param {string} [extraClass]
+     * @returns {string}
+     */
     function restartButton(vm, extraClass = "") {
       return vm.canRestart
         ? actionButton(
@@ -1542,6 +1586,10 @@
         : "";
     }
 
+    /**
+     * @param {ActiveRowViewModel} vm
+     * @returns {string}
+     */
     function skipButton(vm) {
       return !vm.done && !vm.paused && vm.mode === "time"
         ? actionButton({
@@ -1553,11 +1601,17 @@
         : "";
     }
 
-    // Only reached when t.id !== snoozingId — see html() below, which
-    // replaces .controls (and everything else after .title) with
-    // SnoozeForm.html() once this row's own form is open, so there's
-    // no redundant trigger sitting next to it. Like restartButton, called
-    // with no extraClass for the row-menu-popover's copy.
+    /**
+     * Only reached when t.id !== snoozingId — see html() below, which
+     * replaces .controls (and everything else after .title) with
+     * SnoozeForm.html() once this row's own form is open, so there's
+     * no redundant trigger sitting next to it. Like restartButton,
+     * called with no extraClass for the row-menu-popover's copy.
+     *
+     * @param {ActiveRowViewModel} vm
+     * @param {string} [extraClass]
+     * @returns {string}
+     */
     function snoozeButton(vm, extraClass = "") {
       return vm.canSnooze
         ? actionButton(
@@ -1573,6 +1627,11 @@
     }
 
     return {
+      /**
+       * @param {ActiveTimer} t
+       * @param {number} now - epoch ms.
+       * @returns {string}
+       */
       html(t, now) {
         const vm = computeViewModel(t, now);
 
@@ -1580,9 +1639,8 @@
         // snoozed run's Ends At time stays visually distinct even
         // after it reaches Done again — t.snoozed is only cleared by
         // Restart or Edit (see EditForm.apply), which define a
-        // genuinely
-        // new run, deliberately not by tick()'s natural-completion
-        // branch.
+        // genuinely new run, deliberately not by tick()'s
+        // natural-completion branch.
         const restOfRowHtml =
           t.id === snoozingId
             ? SnoozeForm.html()
@@ -1692,6 +1750,11 @@
         `;
       },
 
+      /**
+       * @param {Element} row
+       * @param {ActiveTimer} t
+       * @param {number} now - epoch ms.
+       */
       patch(row, t, now) {
         const remainEl = $(".remain", row);
         const whenEl = $(".when-remain .when", row);
@@ -1735,6 +1798,7 @@
     };
   })();
 
+  /** Fully rebuilds the Active list (`#timers`) from `timers`. */
   function renderActive() {
     TagFilter.renderChips(
       timersTagFilterEl,
@@ -1783,15 +1847,27 @@
   const trashHeaderEl = $("#trash-header");
   const trashTagFilterEl = $("#trash-tag-filter");
 
-  // Builds a single Trash row's markup, and patches its purge
-  // countdown in tick()'s lightweight update — both share the same
-  // purgesIn() so they can't drift apart.
+  /**
+   * Builds a single Trash row's markup, and patches its purge
+   * countdown in tick()'s lightweight update — both share the same
+   * purgesIn() so they can't drift apart.
+   */
   const TrashRow = (() => {
+    /**
+     * @param {TrashTimer} t
+     * @param {number} now - epoch ms.
+     * @returns {number} ms until this item is purged.
+     */
     function purgesIn(t, now) {
       return clamp0(TRASH_RETENTION_MS - (now - t.deletedAt));
     }
 
     return {
+      /**
+       * @param {TrashTimer} t
+       * @param {number} now - epoch ms.
+       * @returns {string}
+       */
       html(t, now) {
         return html`
           <div class="title">
@@ -1818,12 +1894,18 @@
         `;
       },
 
+      /**
+       * @param {Element} row
+       * @param {TrashTimer} t
+       * @param {number} now - epoch ms.
+       */
       patch(row, t, now) {
         $(".remain", row).textContent = Duration.humanize(purgesIn(t, now));
       },
     };
   })();
 
+  /** Fully rebuilds the Trash list (`#trash-list`) from `trash`. */
   function renderTrash() {
     TagFilter.renderChips(
       trashTagFilterEl,
@@ -1855,6 +1937,11 @@
     }
   }
 
+  /**
+   * Appends `t` to `trash` as a new `TrashTimer`.
+   *
+   * @param {ActiveTimer} t
+   */
   function moveToTrash(t) {
     trash.push({
       id: t.id,
@@ -1868,6 +1955,11 @@
     });
   }
 
+  /**
+   * Removes any `trash` items past `TRASH_RETENTION_MS`.
+   *
+   * @returns {boolean} whether anything was purged.
+   */
   function purgeExpiredTrashItems() {
     const now = Date.now();
     const before = trash.length;
