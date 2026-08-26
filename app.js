@@ -1,10 +1,58 @@
 (() => {
   /*** State ***/
-  /** @type {{id:number,title:string,tags:string[],endAt:number,createdAt:number,notified:boolean,snoozed:boolean,paused:boolean,pausedAt?:number,remainingAtPause?:number,originalDuration:number,daysOfWeek?:number[]}[]} */
+
+  /**
+   * An active timer, in either "duration" or "time" mode.
+   * @typedef {object} ActiveTimer
+   * @property {number} id
+   * @property {string} title
+   * @property {string[]} tags
+   * @property {"duration"|"time"} mode
+   * @property {number} endAt - epoch ms this timer fires at.
+   * @property {number} createdAt - epoch ms this run started (reset on Restart).
+   * @property {boolean} notified - whether the completion beep has fired for this run.
+   * @property {boolean} snoozed - whether endAt is currently a snooze re-fire time.
+   * @property {boolean} paused
+   * @property {number} [pausedAt] - epoch ms Pause was pressed; only set while paused.
+   * @property {number} [remainingAtPause] - ms remaining when Pause was pressed.
+   * @property {number} originalDuration - configured duration in ms; the "duration" mode target, and preserved across "time" mode for Restart.
+   * @property {string} [targetTime] - "HH:MM" or "HH:MM:SS"; the "time" mode target.
+   * @property {number[]} [daysOfWeek] - Date#getDay() values (0=Sunday) restricting a "time" mode timer; empty/undefined means every day.
+   */
+
+  /**
+   * A deleted timer awaiting purge, or the equivalent Archive shape below —
+   * both drop the live-run fields (endAt/notified/snoozed/paused/...) that
+   * only make sense for an `ActiveTimer`, and add one timestamp of their
+   * own.
+   * @typedef {object} TrashTimer
+   * @property {number} id
+   * @property {string} title
+   * @property {string[]} tags
+   * @property {"duration"|"time"} mode
+   * @property {number} originalDuration
+   * @property {string} [targetTime]
+   * @property {number[]} [daysOfWeek]
+   * @property {number} deletedAt - epoch ms; purged once TRASH_RETENTION_MS elapses.
+   */
+
+  /**
+   * @typedef {object} ArchivedTimer
+   * @property {number} id
+   * @property {string} title
+   * @property {string[]} tags
+   * @property {"duration"|"time"} mode
+   * @property {number} originalDuration
+   * @property {string} [targetTime]
+   * @property {number[]} [daysOfWeek]
+   * @property {number} archivedAt - epoch ms.
+   */
+
+  /** @type {ActiveTimer[]} */
   let timers = [];
-  /** @type {{id:number,title:string,tags:string[],originalDuration:number,deletedAt:number,daysOfWeek?:number[]}[]} */
+  /** @type {TrashTimer[]} */
   let trash = [];
-  /** @type {{id:number,title:string,tags:string[],originalDuration:number,archivedAt:number,daysOfWeek?:number[]}[]} */
+  /** @type {ArchivedTimer[]} */
   let archived = [];
   let seq = 1;
 
