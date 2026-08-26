@@ -59,13 +59,18 @@
   const TRASH_RETENTION_MS = 5 * 60 * 1000;
 
   /*** LocalStorage ***/
-  // Persists {seq, timers, trash, archived} as one JSON blob.
-  // migrateLegacyStorage is a load()-only internal step, not exposed.
+
+  /**
+   * Persists `{seq, timers, trash, archived}` to localStorage as one JSON
+   * blob. `migrateLegacyStorage` is a `load()`-only internal step, not
+   * exposed.
+   */
   const Storage = (() => {
     const STORAGE_KEY = "flex-timer-data";
     // TODO: Rename migration from the simple-timer era. Safe to remove around 2027.
     const LEGACY_STORAGE_KEY = "simple-timer-data";
 
+    /** One-time migration from the pre-rename `simple-timer-data` key. */
     function migrateLegacyStorage() {
       if (localStorage.getItem(STORAGE_KEY) !== null) return;
       const legacyData = localStorage.getItem(LEGACY_STORAGE_KEY);
@@ -75,6 +80,7 @@
     }
 
     return {
+      /** Writes the current state to localStorage. */
       save() {
         try {
           localStorage.setItem(
@@ -86,6 +92,7 @@
         }
       },
 
+      /** Reads persisted state into timers/trash/archived, migrating the legacy key first. */
       load() {
         try {
           migrateLegacyStorage();
@@ -111,21 +118,46 @@
   Storage.load();
 
   /*** Utilities ***/
+
+  /** Tagged template: joins the strings/values back into a plain string (no escaping/sanitizing — just interpolation). */
   const html = (strings, ...values) => {
     return strings.reduce(
       (result, string) => `${result}${string}${values.shift() ?? ""}`,
       "",
     );
   };
+
+  /**
+   * @param {string} sel
+   * @param {ParentNode} [el]
+   * @returns {Element|null}
+   */
   const $ = (sel, el = document) => el.querySelector(sel);
+
+  /**
+   * Zero-pads a non-negative integer to (at least) 2 digits.
+   *
+   * @param {number} n
+   * @returns {string}
+   */
   const fmt2 = (n) => String(Math.floor(Math.abs(n))).padStart(2, "0");
+
+  /**
+   * @param {number} ms
+   * @returns {number} `ms`, or 0 if negative.
+   */
   const clamp0 = (ms) => (ms < 0 ? 0 : ms);
 
-  // Pull #tag tokens out of a title string instead of requiring a
-  // separate tags field: any "#" followed by non-whitespace becomes a
-  // tag (normalized like the old comma-separated input — trimmed,
-  // lowercased, deduped, sorted alphabetically regardless of input
-  // order) and is removed from the displayed title.
+  /**
+   * Pull #tag tokens out of a title string instead of requiring a
+   * separate tags field: any "#" followed by non-whitespace becomes a
+   * tag (normalized like the old comma-separated input — trimmed,
+   * lowercased, deduped, sorted alphabetically regardless of input
+   * order) and is removed from the displayed title.
+   *
+   * @param {string} rawTitle
+   * @returns {{title: string, tags: string[]}}
+   */
   function extractTagsFromTitle(rawTitle) {
     const tags = [];
     const title = String(rawTitle || "")
@@ -139,9 +171,14 @@
     return { title, tags: [...new Set(tags)].sort() };
   }
 
-  // Inverse of extractTagsFromTitle: reassemble the raw text a user
-  // would type (title + trailing #tag tokens) so an edit form can be
-  // seeded with something that round-trips back through it unchanged.
+  /**
+   * Inverse of extractTagsFromTitle: reassemble the raw text a user
+   * would type (title + trailing #tag tokens) so an edit form can be
+   * seeded with something that round-trips back through it unchanged.
+   *
+   * @param {ActiveTimer|TrashTimer|ArchivedTimer} t
+   * @returns {string}
+   */
   function composeTitleWithTags(t) {
     const tagTokens = (t.tags || []).map((tag) => `#${tag}`).join(" ");
     return [t.title, tagTokens].filter(Boolean).join(" ");
@@ -153,16 +190,31 @@
   // Point-in-time / calendar concerns: clock-time formatting, weekday
   // restrictions, and resolving a "time" mode timer's next occurrence.
   const Clock = (() => {
-    // time-only (no date)
+    /**
+     * Formats a timestamp as a time-only (no date) string.
+     *
+     * @param {number} ts
+     * @returns {string}
+     */
     function toTime(ts) {
       return new Date(ts).toLocaleTimeString([], { hour12: false });
     }
 
+    /**
+     * @param {number} a
+     * @param {number} b
+     * @returns {boolean}
+     */
     function isSameDay(a, b) {
       return new Date(a).toDateString() === new Date(b).toDateString();
     }
 
-    // date with weekday, for tooltips on cross-day "Ends At" times
+    /**
+     * Date with weekday, for tooltips on cross-day "Ends At" times.
+     *
+     * @param {number} ts
+     * @returns {string}
+     */
     function toDateWithWeekday(ts) {
       return new Date(ts).toLocaleDateString([], {
         year: "numeric",
@@ -172,20 +224,33 @@
       });
     }
 
-    // Short weekday names indexed like Date#getDay() (0=Sunday) — this
-    // indexing is load-bearing (checkbox data-day values and
-    // advanceToAllowedDay's day-of-week matching both key off it) and
-    // must not change even though the UI displays/lists Monday first.
+    /**
+     * Short weekday names indexed like Date#getDay() (0=Sunday) — this
+     * indexing is load-bearing (checkbox data-day values and
+     * advanceToAllowedDay's day-of-week matching both key off it) and
+     * must not change even though the UI displays/lists Monday first.
+     *
+     * @type {string[]}
+     */
     const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-    // Display order for the weekday toggle buttons and daysOfWeekLabel:
-    // Monday first, Sunday last (still Date#getDay() values under the
-    // hood, just reordered for presentation).
+    /**
+     * Display order for the weekday toggle buttons and daysOfWeekLabel:
+     * Monday first, Sunday last (still Date#getDay() values under the
+     * hood, just reordered for presentation).
+     *
+     * @type {number[]}
+     */
     const WEEKDAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
-    // Comma-joined weekday names (Monday-first) for a "time" mode
-    // timer's daysOfWeek restriction, or "" when unrestricted (fires
-    // every day).
+    /**
+     * Comma-joined weekday names (Monday-first) for a "time" mode
+     * timer's daysOfWeek restriction, or "" when unrestricted (fires
+     * every day).
+     *
+     * @param {number[]} [daysOfWeek]
+     * @returns {string}
+     */
     function daysOfWeekLabel(daysOfWeek) {
       if (!daysOfWeek || !daysOfWeek.length) return "";
       const order = new Set(daysOfWeek);
@@ -194,11 +259,17 @@
         .join(", ");
     }
 
-    // Push `target` forward in 24h steps until it lands on a day-of-week
-    // present in `daysOfWeek` (0=Sunday..6=Saturday, matching
-    // Date#getDay()). A no-op when daysOfWeek is empty/undefined, which
-    // means "every day". Bounded to 7 iterations since some day within
-    // a week is always allowed whenever daysOfWeek is non-empty.
+    /**
+     * Push `target` forward in 24h steps until it lands on a day-of-week
+     * present in `daysOfWeek` (0=Sunday..6=Saturday, matching
+     * Date#getDay()). A no-op when daysOfWeek is empty/undefined, which
+     * means "every day". Bounded to 7 iterations since some day within
+     * a week is always allowed whenever daysOfWeek is non-empty.
+     *
+     * @param {number} target - epoch ms.
+     * @param {number[]} [daysOfWeek]
+     * @returns {number} epoch ms.
+     */
     function advanceToAllowedDay(target, daysOfWeek) {
       if (!daysOfWeek || !daysOfWeek.length) return target;
 
@@ -213,10 +284,17 @@
       return target;
     }
 
-    // Resolve "HH:MM" or "HH:MM:SS" to the next occurrence of that time
-    // (today if it hasn't passed yet, otherwise tomorrow), further
-    // restricted to daysOfWeek if given. Seconds are optional and
-    // default to 0.
+    /**
+     * Resolve "HH:MM" or "HH:MM:SS" to the next occurrence of that time
+     * (today if it hasn't passed yet, otherwise tomorrow), further
+     * restricted to daysOfWeek if given. Seconds are optional and
+     * default to 0.
+     *
+     * @param {string} timeStr
+     * @param {number} [now] - epoch ms.
+     * @param {number[]} [daysOfWeek]
+     * @returns {number|null} epoch ms, or null if `timeStr` doesn't parse.
+     */
     function computeNextTimeBasedEndAt(timeStr, now = Date.now(), daysOfWeek) {
       const m = String(timeStr || "").match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
       if (!m) return null;
@@ -248,6 +326,12 @@
   // (milliseconds), for "duration" mode timers.
   const Duration = (() => {
     return {
+      /**
+       * Formats a millisecond duration as `HH:MM:SS`.
+       *
+       * @param {number} ms
+       * @returns {string}
+       */
       humanize(ms) {
         ms = Math.max(0, Math.round(ms));
         const totalSec = Math.floor(ms / 1000);
@@ -258,6 +342,13 @@
         return `${fmt2(h)}:${fmt2(m)}:${fmt2(s)}`;
       },
 
+      /**
+       * Parses a duration string in `mm:ss`, `h:mm:ss`, plain-minutes, or
+       * short-unit (`1h`/`90s`/`500ms`/`2d`) form.
+       *
+       * @param {string} input
+       * @returns {number} ms, or 0 if `input` doesn't parse.
+       */
       parseDuration(input) {
         const s = String(input || "").trim();
         if (!s) return 0;
@@ -293,14 +384,25 @@
         return 0;
       },
 
-      // Snap a duration-based endAt to the second grid so its
-      // countdown decrements in phase with other timers instead of
-      // drifting by the sub-second remainder of Date.now() at
-      // creation/resume time.
+      /**
+       * Snap a duration-based endAt to the second grid so its countdown
+       * decrements in phase with other timers instead of drifting by
+       * the sub-second remainder of Date.now() at creation/resume time.
+       *
+       * @param {number} ms - epoch ms.
+       * @returns {number} epoch ms, rounded to the nearest second.
+       */
       alignEndAtToSecond(ms) {
         return Math.round(ms / 1000) * 1000;
       },
 
+      /**
+       * Formats a millisecond duration as `1d 2h 3m 4s` (only non-zero
+       * parts).
+       *
+       * @param {number} ms
+       * @returns {string}
+       */
       formatDurationLabel(ms) {
         const totalSec = Math.round(Math.max(0, ms) / 1000);
         const d = Math.floor(totalSec / 86400);
@@ -317,10 +419,15 @@
         return parts.join(" ");
       },
 
-      // Render a duration back into an editable "H:MM:SS" / "MM:SS"
-      // string (rather than formatDurationLabel's "1h 5m" form) so it
-      // round-trips exactly through parseDuration when an edit is
-      // saved unchanged.
+      /**
+       * Render a duration back into an editable "H:MM:SS" / "MM:SS"
+       * string (rather than formatDurationLabel's "1h 5m" form) so it
+       * round-trips exactly through parseDuration when an edit is
+       * saved unchanged.
+       *
+       * @param {number} ms
+       * @returns {string}
+       */
       durationToEditableString(ms) {
         const totalSec = Math.round(Math.max(0, ms) / 1000);
         const h = Math.floor(totalSec / 3600);
@@ -332,9 +439,15 @@
     };
   })();
 
-  // Resolve the end time for (re)starting a timer, branching on its
-  // mode — the one place duration-mode and time-mode logic meet, so it
-  // isn't owned by either Duration or Clock.
+  /**
+   * Resolve the end time for (re)starting a timer, branching on its
+   * mode — the one place duration-mode and time-mode logic meet, so it
+   * isn't owned by either Duration or Clock.
+   *
+   * @param {ActiveTimer|TrashTimer|ArchivedTimer} t
+   * @param {number} [now] - epoch ms.
+   * @returns {number|null} epoch ms; null if `t.mode === "time"` and `t.targetTime` doesn't parse.
+   */
   function computeRestartEndAt(t, now = Date.now()) {
     if (t.mode === "time") {
       return Clock.computeNextTimeBasedEndAt(t.targetTime, now, t.daysOfWeek);
@@ -352,12 +465,17 @@
   const toTime = Clock.toTime;
   const toDateWithWeekday = Clock.toDateWithWeekday;
 
-  // The target time for "time" mode, or the configured duration for
-  // "duration" mode — the plain configured value, with no
-  // day-of-week restriction attached. Trailing ":00" seconds are
-  // hidden since they're the common (omitted) case. Used for the
-  // "Set" column in Archive/Trash, which has no room to spare for a
-  // day list on top of it.
+  /**
+   * The target time for "time" mode, or the configured duration for
+   * "duration" mode — the plain configured value, with no day-of-week
+   * restriction attached. Trailing ":00" seconds are hidden since
+   * they're the common (omitted) case. Used for the "Set" column in
+   * Archive/Trash, which has no room to spare for a day list on top of
+   * it.
+   *
+   * @param {ActiveTimer|TrashTimer|ArchivedTimer} t
+   * @returns {string}
+   */
   function formatTimerLabel(t) {
     if (t.mode !== "time") {
       return Duration.formatDurationLabel(t.originalDuration);
@@ -370,26 +488,31 @@
     return escapeHtml(targetTime);
   }
 
-  // Fallback title for an untitled timer: formatTimerLabel(t), with a
-  // day-of-week restriction prefixed (e.g. "Mon 10:00") since this is
-  // the one place that restriction is visible without hovering the
-  // mode badge's tooltip.
+  /**
+   * Fallback title for an untitled timer: formatTimerLabel(t), with a
+   * day-of-week restriction prefixed (e.g. "Mon 10:00") since this is
+   * the one place that restriction is visible without hovering the
+   * mode badge's tooltip.
+   *
+   * @param {ActiveTimer|TrashTimer|ArchivedTimer} t
+   * @returns {string}
+   */
   function formatFallbackTitle(t) {
     const label = formatTimerLabel(t);
     const days = t.mode === "time" ? Clock.daysOfWeekLabel(t.daysOfWeek) : "";
     return days ? `${days} ${label}` : label;
   }
 
-  // Shared line-icon set (stroke-based, 24x24 viewBox) used by the
-  // Actions buttons, the status dot, and the mode badge, so every
-  // glyph in the UI shares one stroke weight/color model instead of
-  // mixing emoji drawn in unrelated styles. Color comes from the CSS
-  // `color` of whatever wraps the icon (buttons already carry
-  // accent/warn/danger/neutral colors; .status.ok/.paused/.done/
-  // .snoozed too),
-  // so call sites never need to pick a color themselves.
-  // Icon rendering: inline stroked SVGs for row-action buttons, plus the
-  // compact status dot and the Duration/Time mode badge built from them.
+  /**
+   * Shared line-icon set (stroke-based, 24x24 viewBox): inline SVGs for
+   * row-action buttons, the compact status dot, and the Duration/Time
+   * mode badge, so every glyph in the UI shares one stroke weight/color
+   * model instead of mixing emoji drawn in unrelated styles. Color
+   * comes from the CSS `color` of whatever wraps the icon (buttons
+   * already carry accent/warn/danger/neutral colors;
+   * .status.ok/.paused/.done/.snoozed too), so call sites never need to
+   * pick a color themselves.
+   */
   const Icons = (() => {
     const STROKE_ICON_PATHS = {
       "refresh-cw": html`
@@ -454,6 +577,11 @@
       `,
     };
 
+    /**
+     * @param {string} name - a key of STROKE_ICON_PATHS, or "circle"/"more-vertical".
+     * @param {number} [size]
+     * @returns {string}
+     */
     function icon(name, size = 18) {
       if (name === "circle") {
         return html`
@@ -501,21 +629,30 @@
       `;
     }
 
-    // Compact status glyph shown at narrow widths (kept visually
-    // distinct from the Actions icons: a plain dot, not a shape like
-    // play/pause). Color comes from the wrapping
-    // .status.ok/.paused/.done/.snoozed class, so this doesn't need to
-    // take the status text/branch on it — every status renders the
-    // same plain dot.
+    /**
+     * Compact status glyph shown at narrow widths (kept visually
+     * distinct from the Actions icons: a plain dot, not a shape like
+     * play/pause). Color comes from the wrapping
+     * .status.ok/.paused/.done/.snoozed class, so this doesn't need to
+     * take the status text/branch on it — every status renders the
+     * same plain dot.
+     *
+     * @returns {string}
+     */
     function statusIcon() {
       return icon("circle", 14);
     }
 
-    // Small badge indicating whether a timer was set by duration or by
-    // a target clock time. Tooltip shows the concrete value (e.g. the
-    // original duration, or the originally configured target time —
-    // the latter matters once Snooze can push endAt past it) so it's
-    // visible even when a title hides the fallback label.
+    /**
+     * Small badge indicating whether a timer was set by duration or by
+     * a target clock time. Tooltip shows the concrete value (e.g. the
+     * original duration, or the originally configured target time —
+     * the latter matters once Snooze can push endAt past it) so it's
+     * visible even when a title hides the fallback label.
+     *
+     * @param {ActiveTimer|TrashTimer|ArchivedTimer} t
+     * @returns {string}
+     */
     function modeBadge(t) {
       const isTime = t.mode === "time";
       const days = isTime ? Clock.daysOfWeekLabel(t.daysOfWeek) : "";
@@ -541,7 +678,18 @@
   const modeBadge = Icons.modeBadge;
 
   /*** Sound ***/
+
+  /** @type {AudioContext|null} */
   let audioCtx = null;
+
+  /**
+   * Plays a short beep sequence via the Web Audio API.
+   *
+   * @param {number} [times] - number of beeps.
+   * @param {number} [freq] - oscillator frequency in Hz.
+   * @param {number} [duration] - each beep's length in seconds.
+   * @param {number} [gap] - silence between beeps in seconds.
+   */
   function playBeep(times = 3, freq = 1000, duration = 0.18, gap = 0.08) {
     try {
       if (!audioCtx) {
@@ -580,6 +728,11 @@
   const timersFooterEl = $("#timers-footer");
 
   /*** Render ***/
+
+  /**
+   * @param {string} s
+   * @returns {string}
+   */
   function escapeHtml(s) {
     const map = {
       "&": "&amp;",
@@ -592,10 +745,15 @@
     return String(s).replace(/[&<>"']/g, (ch) => map[ch]);
   }
 
-  // Small pill row rendered under a timer's title (empty string, i.e.
-  // nothing rendered, when the timer has no tags). Each tag is
-  // clickable to toggle it in that list's tag filter (see the click
-  // handlers on listEl/trashListEl/archiveListEl below).
+  /**
+   * Small pill row rendered under a timer's title (empty string, i.e.
+   * nothing rendered, when the timer has no tags). Each tag is
+   * clickable to toggle it in that list's tag filter (see the click
+   * handlers on listEl/trashListEl/archiveListEl below).
+   *
+   * @param {ActiveTimer|TrashTimer|ArchivedTimer} t
+   * @returns {string}
+   */
   function tagsHtml(t) {
     if (!t.tags || !t.tags.length) return "";
 
@@ -617,8 +775,11 @@
   // Per-list tag filter state (OR match: a timer/trash/archive item is
   // shown if it has any of the selected tags). Kept in memory only —
   // intentionally not persisted, so filters reset on reload.
+  /** @type {Set<string>} */
   let timersTagFilter = new Set();
+  /** @type {Set<string>} */
   let archiveTagFilter = new Set();
+  /** @type {Set<string>} */
   let trashTagFilter = new Set();
 
   // Whether each list's tag filter chip bar is expanded past its
@@ -642,12 +803,16 @@
   // unrelated state changes (e.g. another timer finishing) instead of
   // resetting to the original values on every keystroke-unrelated
   // re-render.
+  /** @type {number|null} */
   let editingId = null;
+  /** @type {{title: string, value: string, daysOfWeek?: number[]}|null} */
   let editDraft = null;
 
   // snoozingId/snoozeDraft mirror editingId/editDraft above, but for
   // the inline "extend by" form shown on a Done timer.
+  /** @type {number|null} */
   let snoozingId = null;
+  /** @type {{value: string}|null} */
   let snoozeDraft = null;
 
   // Tag-filtering feature shared by the Timers/Trash/Archived lists:
@@ -655,6 +820,10 @@
   // current filter, toggling a tag/clearing the filter, and rendering
   // the chip bar itself.
   const TagFilter = (() => {
+    /**
+     * @param {(ActiveTimer|TrashTimer|ArchivedTimer)[]} items
+     * @returns {string[]} every distinct tag among `items`, sorted.
+     */
     function availableTags(items) {
       const set = new Set();
       for (const t of items) {
@@ -671,6 +840,11 @@
     // as overflowing.
     const COLLAPSED_HEIGHT = 32;
 
+    /**
+     * @param {ActiveTimer|TrashTimer|ArchivedTimer} t
+     * @param {Set<string>} filterSet
+     * @returns {boolean} whether `t` matches the filter (no filter selected counts as a match).
+     */
     function matches(t, filterSet) {
       if (!filterSet.size) return true;
       const tags = t.tags || [];
@@ -678,6 +852,10 @@
       return tags.some((tag) => filterSet.has(tag));
     }
 
+    /**
+     * @param {Set<string>} filterSet
+     * @param {string} tag
+     */
     function toggle(filterSet, tag) {
       if (filterSet.has(tag)) {
         filterSet.delete(tag);
@@ -686,14 +864,21 @@
       }
     }
 
-    // Renders the tag chip bar for one list, offering every tag present
-    // among that list's own items (not just the currently filtered
-    // subset), so deselecting a tag doesn't remove it from the choices.
-    // When there are enough tags to wrap past one row, the chip bar
-    // starts collapsed to one row with a toggle to expand/collapse it
-    // (tracked via `expanded`, owned by the caller) — otherwise a list
-    // with many distinct tags eats a lot of vertical space before any
-    // timers/trash/archive rows are visible.
+    /**
+     * Renders the tag chip bar for one list, offering every tag present
+     * among that list's own items (not just the currently filtered
+     * subset), so deselecting a tag doesn't remove it from the choices.
+     * When there are enough tags to wrap past one row, the chip bar
+     * starts collapsed to one row with a toggle to expand/collapse it
+     * (tracked via `expanded`, owned by the caller) — otherwise a list
+     * with many distinct tags eats a lot of vertical space before any
+     * timers/trash/archive rows are visible.
+     *
+     * @param {Element} containerEl
+     * @param {(ActiveTimer|TrashTimer|ArchivedTimer)[]} items
+     * @param {Set<string>} filterSet
+     * @param {boolean} expanded
+     */
     function renderChips(containerEl, items, filterSet, expanded) {
       const tags = availableTags(items);
       const hasUntagged = items.some((t) => !t.tags || !t.tags.length);
@@ -777,9 +962,16 @@
       }
     }
 
-    // Handles a click anywhere in a tag filter chip bar (select/deselect
-    // a tag, clear the filter, or expand/collapse the chip bar via
-    // toggleExpanded).
+    /**
+     * Handles a click anywhere in a tag filter chip bar (select/deselect
+     * a tag, clear the filter, or expand/collapse the chip bar via
+     * toggleExpanded).
+     *
+     * @param {MouseEvent} e
+     * @param {Set<string>} filterSet
+     * @param {() => void} rerender
+     * @param {() => void} toggleExpanded
+     */
     function handleClick(e, filterSet, rerender, toggleExpanded) {
       const button = e.target.closest("button");
       if (!button) return;
@@ -798,13 +990,19 @@
     return { matches, toggle, renderChips, handleClick };
   })();
 
-  // Inline edit form shown in place of a row's normal content.
-  // Shared by the Timers and Archived lists: both item shapes carry
-  // the same title/tags/mode/originalDuration/targetTime/daysOfWeek
-  // fields.
+  /**
+   * Inline edit form shown in place of a row's normal content. Shared
+   * by the Timers and Archived lists: both item shapes carry the same
+   * title/tags/mode/originalDuration/targetTime/daysOfWeek fields.
+   */
   const EditForm = (() => {
-    // Named buildHtml, not html, so it doesn't shadow the outer html
-    // template-tag helper used throughout its own body.
+    /**
+     * Named buildHtml, not html, so it doesn't shadow the outer html
+     * template-tag helper used throughout its own body.
+     *
+     * @param {ActiveTimer|ArchivedTimer} t
+     * @returns {string}
+     */
     function buildHtml(t) {
       const draft = editDraft || {
         title: composeTitleWithTags(t),
@@ -901,12 +1099,18 @@
       `;
     }
 
-    // Apply an edit form's current input values to `t` (a timer or
-    // archived item — both share the same fields). Returns false
-    // (leaving the edit form open) if the value field failed to
-    // parse. Archived items have no endAt/paused/notified, so those
-    // updates are skipped via the `"endAt" in t` guard, letting
-    // active timers and archived items share this one function.
+    /**
+     * Apply an edit form's current input values to `t` (a timer or
+     * archived item — both share the same fields). Returns false
+     * (leaving the edit form open) if the value field failed to
+     * parse. Archived items have no endAt/paused/notified, so those
+     * updates are skipped via the `"endAt" in t` guard, letting active
+     * timers and archived items share this one function.
+     *
+     * @param {Element} row
+     * @param {ActiveTimer|ArchivedTimer} t
+     * @returns {boolean} whether the edit was applied (false leaves the form open).
+     */
     function apply(row, t) {
       const titleInput = $(".edit-title", row);
       const valueInput = $(".edit-value", row);
@@ -966,6 +1170,7 @@
       return true;
     }
 
+    /** @param {ParentNode} containerEl */
     function focusTitle(containerEl) {
       const input = $(".editing .edit-title", containerEl);
       if (input) {
@@ -974,9 +1179,15 @@
       }
     }
 
-    // Shared Enter-to-save / Escape-to-cancel handling for both lists'
-    // edit forms. renderFn is whichever of renderActive()/renderArchived()
-    // owns the row the event originated in.
+    /**
+     * Shared Enter-to-save / Escape-to-cancel handling for both lists'
+     * edit forms. renderFn is whichever of
+     * renderActive()/renderArchived() owns the row the event
+     * originated in.
+     *
+     * @param {() => void} renderFn
+     * @returns {(e: KeyboardEvent) => void}
+     */
     function handleKeydown(renderFn) {
       return (e) => {
         if (!e.target.matches(".edit-title, .edit-value")) return;
@@ -1005,9 +1216,13 @@
       };
     }
 
-    // Keep editDraft in sync with in-progress (unsaved) edits so a full
-    // renderActive()/renderArchived() triggered by unrelated state
-    // doesn't wipe them.
+    /**
+     * Keep editDraft in sync with in-progress (unsaved) edits so a full
+     * renderActive()/renderArchived() triggered by unrelated state
+     * doesn't wipe them.
+     *
+     * @param {Event} e
+     */
     function handleInput(e) {
       if (editingId == null) return;
 
@@ -1055,16 +1270,22 @@
     };
   })();
 
-  // Inline "extend by" form shown in place of a Done timer's Ends
-  // At/Remaining/Status/Controls — the title (unlike EditForm.html,
-  // which replaces the whole row including the title) stays put.
-  // Only offered for active timers, so unlike EditForm.html this
-  // doesn't need to handle the archived-item shape.
+  /**
+   * Inline "extend by" form shown in place of a Done timer's Ends
+   * At/Remaining/Status/Controls — the title (unlike EditForm.html,
+   * which replaces the whole row including the title) stays put. Only
+   * offered for active timers, so unlike EditForm.html this doesn't
+   * need to handle the archived-item shape.
+   */
   const SnoozeForm = (() => {
-    // Named buildHtml, not html, so it doesn't shadow the outer html
-    // template-tag helper used throughout its own body. Takes no timer
-    // argument (unlike EditForm.html/ActiveRow.html) — snoozeDraft
-    // fully determines its content.
+    /**
+     * Named buildHtml, not html, so it doesn't shadow the outer html
+     * template-tag helper used throughout its own body. Takes no timer
+     * argument (unlike EditForm.html/ActiveRow.html) — snoozeDraft
+     * fully determines its content.
+     *
+     * @returns {string}
+     */
     function buildHtml() {
       const draft = snoozeDraft || { value: "5" };
 
@@ -1104,13 +1325,19 @@
       `;
     }
 
-    // Apply a snooze form's current input value to `t`. Returns false
-    // (leaving the form open) if the value doesn't parse to a positive
-    // duration — same mm:ss / minutes / 1h / 30s / 2d format as the
-    // Duration mode field, via Duration.parseDuration(). Deliberately
-    // doesn't touch originalDuration/targetTime, so a later Restart
-    // still uses the timer's original setting rather than the snoozed
-    // length.
+    /**
+     * Apply a snooze form's current input value to `t`. Returns false
+     * (leaving the form open) if the value doesn't parse to a positive
+     * duration — same mm:ss / minutes / 1h / 30s / 2d format as the
+     * Duration mode field, via Duration.parseDuration(). Deliberately
+     * doesn't touch originalDuration/targetTime, so a later Restart
+     * still uses the timer's original setting rather than the snoozed
+     * length.
+     *
+     * @param {Element} row
+     * @param {ActiveTimer} t
+     * @returns {boolean} whether the snooze was applied (false leaves the form open).
+     */
     function save(row, t) {
       const valueInput = $(".snooze-value", row);
       const dur = Duration.parseDuration(valueInput.value);
@@ -1129,6 +1356,7 @@
       return true;
     }
 
+    /** @param {ParentNode} containerEl */
     function focusValue(containerEl) {
       const input = $(".snoozing .snooze-value", containerEl);
       if (input) {
@@ -1137,10 +1365,14 @@
       }
     }
 
-    // Enter-to-confirm / Escape-to-cancel for the snooze form. Only
-    // active timers offer Snooze, so unlike EditForm.handleKeydown this
-    // doesn't need a renderFn parameter — it always re-renders the
-    // Timers list.
+    /**
+     * Enter-to-confirm / Escape-to-cancel for the snooze form. Only
+     * active timers offer Snooze, so unlike EditForm.handleKeydown this
+     * doesn't need a renderFn parameter — it always re-renders the
+     * Timers list.
+     *
+     * @param {KeyboardEvent} e
+     */
     function handleKeydown(e) {
       if (!e.target.matches(".snooze-value")) return;
 
@@ -1162,9 +1394,13 @@
       }
     }
 
-    // Keep snoozeDraft in sync with in-progress (unsaved) input so a
-    // full renderActive() triggered by unrelated state doesn't reset it
-    // back to the default value.
+    /**
+     * Keep snoozeDraft in sync with in-progress (unsaved) input so a
+     * full renderActive() triggered by unrelated state doesn't reset it
+     * back to the default value.
+     *
+     * @param {Event} e
+     */
     function handleInput(e) {
       if (snoozingId == null || !e.target.matches(".snooze-value")) {
         return;
