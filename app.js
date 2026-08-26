@@ -105,6 +105,47 @@
   // Point-in-time / calendar concerns: clock-time formatting, weekday
   // restrictions, and resolving a "time" mode timer's next occurrence.
   const Clock = (() => {
+    // time-only (no date)
+    function toTime(ts) {
+      return new Date(ts).toLocaleTimeString([], { hour12: false });
+    }
+
+    function isSameDay(a, b) {
+      return new Date(a).toDateString() === new Date(b).toDateString();
+    }
+
+    // date with weekday, for tooltips on cross-day "Ends At" times
+    function toDateWithWeekday(ts) {
+      return new Date(ts).toLocaleDateString([], {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        weekday: "short",
+      });
+    }
+
+    // Short weekday names indexed like Date#getDay() (0=Sunday) — this
+    // indexing is load-bearing (checkbox data-day values and
+    // advanceToAllowedDay's day-of-week matching both key off it) and
+    // must not change even though the UI displays/lists Monday first.
+    const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+    // Display order for the weekday toggle buttons and daysOfWeekLabel:
+    // Monday first, Sunday last (still Date#getDay() values under the
+    // hood, just reordered for presentation).
+    const WEEKDAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+    // Comma-joined weekday names (Monday-first) for a "time" mode
+    // timer's daysOfWeek restriction, or "" when unrestricted (fires
+    // every day).
+    function daysOfWeekLabel(daysOfWeek) {
+      if (!daysOfWeek || !daysOfWeek.length) return "";
+      const order = new Set(daysOfWeek);
+      return WEEKDAY_DISPLAY_ORDER.filter((d) => order.has(d))
+        .map((d) => WEEKDAY_LABELS[d])
+        .join(", ");
+    }
+
     // Push `target` forward in 24h steps until it lands on a day-of-week
     // present in `daysOfWeek` (0=Sunday..6=Saturday, matching
     // Date#getDay()). A no-op when daysOfWeek is empty/undefined, which
@@ -124,71 +165,34 @@
       return target;
     }
 
+    // Resolve "HH:MM" or "HH:MM:SS" to the next occurrence of that time
+    // (today if it hasn't passed yet, otherwise tomorrow), further
+    // restricted to daysOfWeek if given. Seconds are optional and
+    // default to 0.
+    function computeNextTimeBasedEndAt(timeStr, now = Date.now(), daysOfWeek) {
+      const m = String(timeStr || "").match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+      if (!m) return null;
+
+      const hh = Number(m[1]);
+      const mm = Number(m[2]);
+      const ss = m[3] ? Number(m[3]) : 0;
+      const d = new Date(now);
+      d.setHours(hh, mm, ss, 0);
+
+      let target = d.getTime();
+      if (target <= now) target += 24 * 60 * 60 * 1000;
+
+      return advanceToAllowedDay(target, daysOfWeek);
+    }
+
     return {
-      // time-only (no date)
-      toTime(ts) {
-        return new Date(ts).toLocaleTimeString([], { hour12: false });
-      },
-
-      isSameDay(a, b) {
-        return new Date(a).toDateString() === new Date(b).toDateString();
-      },
-
-      // date with weekday, for tooltips on cross-day "Ends At" times
-      toDateWithWeekday(ts) {
-        return new Date(ts).toLocaleDateString([], {
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          weekday: "short",
-        });
-      },
-
-      // Short weekday names indexed like Date#getDay() (0=Sunday) —
-      // this indexing is load-bearing (checkbox data-day values and
-      // advanceToAllowedDay's day-of-week matching both key off it)
-      // and must not change even though the UI displays/lists Monday
-      // first.
-      WEEKDAY_LABELS: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
-
-      // Display order for the weekday toggle buttons and
-      // daysOfWeekLabel: Monday first, Sunday last (still
-      // Date#getDay() values under the hood, just reordered for
-      // presentation).
-      WEEKDAY_DISPLAY_ORDER: [1, 2, 3, 4, 5, 6, 0],
-
-      // Comma-joined weekday names (Monday-first) for a "time" mode
-      // timer's daysOfWeek restriction, or "" when unrestricted
-      // (fires every day).
-      daysOfWeekLabel(daysOfWeek) {
-        if (!daysOfWeek || !daysOfWeek.length) return "";
-        const order = new Set(daysOfWeek);
-        return Clock.WEEKDAY_DISPLAY_ORDER.filter((d) => order.has(d))
-          .map((d) => Clock.WEEKDAY_LABELS[d])
-          .join(", ");
-      },
-
-      // Resolve "HH:MM" or "HH:MM:SS" to the next occurrence of that
-      // time (today if it hasn't passed yet, otherwise tomorrow),
-      // further restricted to daysOfWeek if given. Seconds are
-      // optional and default to 0.
-      computeNextTimeBasedEndAt(timeStr, now = Date.now(), daysOfWeek) {
-        const m = String(timeStr || "").match(
-          /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/,
-        );
-        if (!m) return null;
-
-        const hh = Number(m[1]);
-        const mm = Number(m[2]);
-        const ss = m[3] ? Number(m[3]) : 0;
-        const d = new Date(now);
-        d.setHours(hh, mm, ss, 0);
-
-        let target = d.getTime();
-        if (target <= now) target += 24 * 60 * 60 * 1000;
-
-        return advanceToAllowedDay(target, daysOfWeek);
-      },
+      toTime,
+      isSameDay,
+      toDateWithWeekday,
+      WEEKDAY_LABELS,
+      WEEKDAY_DISPLAY_ORDER,
+      daysOfWeekLabel,
+      computeNextTimeBasedEndAt,
     };
   })();
 
@@ -402,86 +406,82 @@
       `,
     };
 
-    return {
-      icon(name, size = 18) {
-        if (name === "circle") {
-          return html`
-            <svg
-              viewBox="0 0 24 24"
-              width="${size}"
-              height="${size}"
-              fill="currentColor"
-            >
-              <circle cx="12" cy="12" r="10"></circle>
-            </svg>
-          `;
-        }
-
-        // "More actions" row-menu toggle: three filled dots read better
-        // than the stroked-outline treatment used for the other icons.
-        if (name === "more-vertical") {
-          return html`
-            <svg
-              viewBox="0 0 24 24"
-              width="${size}"
-              height="${size}"
-              fill="currentColor"
-            >
-              <circle cx="12" cy="5" r="1.5"></circle>
-              <circle cx="12" cy="12" r="1.5"></circle>
-              <circle cx="12" cy="19" r="1.5"></circle>
-            </svg>
-          `;
-        }
-
+    function icon(name, size = 18) {
+      if (name === "circle") {
         return html`
           <svg
             viewBox="0 0 24 24"
             width="${size}"
             height="${size}"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
+            fill="currentColor"
           >
-            ${STROKE_ICON_PATHS[name]}
+            <circle cx="12" cy="12" r="10"></circle>
           </svg>
         `;
-      },
+      }
 
-      // Compact status glyph shown at narrow widths (kept visually
-      // distinct from the Actions icons: a plain dot, not a shape like
-      // play/pause). Color comes from the wrapping
-      // .status.ok/.paused/.done/.snoozed class, so the dot itself
-      // doesn't need to branch on statusText.
-      statusIconFor(statusText) {
-        return Icons.icon("circle", 14);
-      },
-
-      // Small badge indicating whether a timer was set by duration or
-      // by a target clock time. Tooltip shows the concrete value (e.g.
-      // the original duration, or the originally configured target
-      // time — the latter matters once Snooze can push endAt past it)
-      // so it's visible even when a title hides the fallback label.
-      modeBadge(t) {
-        const isTime = t.mode === "time";
-        const days = isTime ? Clock.daysOfWeekLabel(t.daysOfWeek) : "";
-        const label = isTime
-          ? `At time: ${formatTimerLabel(t)}${days ? ` — ${days}` : ""}`
-          : `Duration: ${Duration.formatDurationLabel(t.originalDuration)}`;
-
+      // "More actions" row-menu toggle: three filled dots read better
+      // than the stroked-outline treatment used for the other icons.
+      if (name === "more-vertical") {
         return html`
-          <span
-            class="mode-badge"
-            data-tooltip="${label}"
-            aria-label="${label}"
+          <svg
+            viewBox="0 0 24 24"
+            width="${size}"
+            height="${size}"
+            fill="currentColor"
           >
-            ${isTime ? Icons.icon("clock", 14) : Icons.icon("hourglass", 14)}
-          </span>
+            <circle cx="12" cy="5" r="1.5"></circle>
+            <circle cx="12" cy="12" r="1.5"></circle>
+            <circle cx="12" cy="19" r="1.5"></circle>
+          </svg>
         `;
-      },
-    };
+      }
+
+      return html`
+        <svg
+          viewBox="0 0 24 24"
+          width="${size}"
+          height="${size}"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          ${STROKE_ICON_PATHS[name]}
+        </svg>
+      `;
+    }
+
+    // Compact status glyph shown at narrow widths (kept visually
+    // distinct from the Actions icons: a plain dot, not a shape like
+    // play/pause). Color comes from the wrapping
+    // .status.ok/.paused/.done/.snoozed class, so the dot itself
+    // doesn't need to branch on statusText.
+    function statusIconFor(statusText) {
+      return icon("circle", 14);
+    }
+
+    // Small badge indicating whether a timer was set by duration or by
+    // a target clock time. Tooltip shows the concrete value (e.g. the
+    // original duration, or the originally configured target time —
+    // the latter matters once Snooze can push endAt past it) so it's
+    // visible even when a title hides the fallback label.
+    function modeBadge(t) {
+      const isTime = t.mode === "time";
+      const days = isTime ? Clock.daysOfWeekLabel(t.daysOfWeek) : "";
+      const label = isTime
+        ? `At time: ${formatTimerLabel(t)}${days ? ` — ${days}` : ""}`
+        : `Duration: ${Duration.formatDurationLabel(t.originalDuration)}`;
+
+      return html`
+        <span class="mode-badge" data-tooltip="${label}" aria-label="${label}">
+          ${isTime ? icon("clock", 14) : icon("hourglass", 14)}
+        </span>
+      `;
+    }
+
+    return { icon, statusIconFor, modeBadge };
   })();
 
   // Hot-path aliases: icon() is called inline in row/form templates
@@ -622,143 +622,141 @@
     // as overflowing.
     const COLLAPSED_HEIGHT = 32;
 
-    return {
-      matches(t, filterSet) {
-        if (!filterSet.size) return true;
-        const tags = t.tags || [];
-        if (filterSet.has(NO_TAGS_FILTER) && !tags.length) return true;
-        return tags.some((tag) => filterSet.has(tag));
-      },
+    function matches(t, filterSet) {
+      if (!filterSet.size) return true;
+      const tags = t.tags || [];
+      if (filterSet.has(NO_TAGS_FILTER) && !tags.length) return true;
+      return tags.some((tag) => filterSet.has(tag));
+    }
 
-      toggle(filterSet, tag) {
-        if (filterSet.has(tag)) {
-          filterSet.delete(tag);
-        } else {
-          filterSet.add(tag);
-        }
-      },
+    function toggle(filterSet, tag) {
+      if (filterSet.has(tag)) {
+        filterSet.delete(tag);
+      } else {
+        filterSet.add(tag);
+      }
+    }
 
-      // Renders the tag chip bar for one list, offering every tag
-      // present among that list's own items (not just the currently
-      // filtered subset), so deselecting a tag doesn't remove it
-      // from the choices. When there are enough tags to wrap past
-      // one row, the chip bar starts collapsed to one row with a
-      // toggle to expand/collapse it (tracked via `expanded`, owned
-      // by the caller) — otherwise a list with many distinct tags
-      // eats a lot of vertical space before any timers/trash/archive
-      // rows are visible.
-      renderChips(containerEl, items, filterSet, expanded) {
-        const tags = availableTags(items);
-        const hasUntagged = items.some((t) => !t.tags || !t.tags.length);
-        // Even with no tags left to offer as chips, keep rendering
-        // when a filter is still active so "Clear filter" stays
-        // reachable — otherwise emptying the list (e.g. by deleting
-        // the last item with the filtered tag) strands the filter
-        // with no way to reset it short of a reload.
-        if (!tags.length && !hasUntagged && !filterSet.size) {
-          containerEl.innerHTML = "";
-          return;
-        }
+    // Renders the tag chip bar for one list, offering every tag present
+    // among that list's own items (not just the currently filtered
+    // subset), so deselecting a tag doesn't remove it from the choices.
+    // When there are enough tags to wrap past one row, the chip bar
+    // starts collapsed to one row with a toggle to expand/collapse it
+    // (tracked via `expanded`, owned by the caller) — otherwise a list
+    // with many distinct tags eats a lot of vertical space before any
+    // timers/trash/archive rows are visible.
+    function renderChips(containerEl, items, filterSet, expanded) {
+      const tags = availableTags(items);
+      const hasUntagged = items.some((t) => !t.tags || !t.tags.length);
+      // Even with no tags left to offer as chips, keep rendering when a
+      // filter is still active so "Clear filter" stays reachable —
+      // otherwise emptying the list (e.g. by deleting the last item
+      // with the filtered tag) strands the filter with no way to reset
+      // it short of a reload.
+      if (!tags.length && !hasUntagged && !filterSet.size) {
+        containerEl.innerHTML = "";
+        return;
+      }
 
-        containerEl.innerHTML = html`
-          <div class="tag-filter-chips">
-            ${tags
-              .map(
-                (tag) => html`
-                  <button
-                    type="button"
-                    class="tag-filter-chip${filterSet.has(tag)
-                      ? " active"
-                      : ""}"
-                    data-tag="${escapeHtml(tag)}"
-                  >
-                    #${escapeHtml(tag)}
-                  </button>
-                `,
-              )
-              .join("")}
-            ${hasUntagged && tags.length
-              ? html`
-                  <button
-                    type="button"
-                    class="tag-filter-chip${filterSet.has(NO_TAGS_FILTER)
-                      ? " active"
-                      : ""}"
-                    data-tag="${escapeHtml(NO_TAGS_FILTER)}"
-                  >
-                    (No tags)
-                  </button>
-                `
-              : ""}
-            ${filterSet.size
-              ? html`<button type="button" class="tag-filter-clear">
-                  Clear filter
-                </button>`
-              : ""}
-          </div>
+      containerEl.innerHTML = html`
+        <div class="tag-filter-chips">
+          ${tags
+            .map(
+              (tag) => html`
+                <button
+                  type="button"
+                  class="tag-filter-chip${filterSet.has(tag) ? " active" : ""}"
+                  data-tag="${escapeHtml(tag)}"
+                >
+                  #${escapeHtml(tag)}
+                </button>
+              `,
+            )
+            .join("")}
+          ${hasUntagged && tags.length
+            ? html`
+                <button
+                  type="button"
+                  class="tag-filter-chip${filterSet.has(NO_TAGS_FILTER)
+                    ? " active"
+                    : ""}"
+                  data-tag="${escapeHtml(NO_TAGS_FILTER)}"
+                >
+                  (No tags)
+                </button>
+              `
+            : ""}
+          ${filterSet.size
+            ? html`<button type="button" class="tag-filter-clear">
+                Clear filter
+              </button>`
+            : ""}
+        </div>
+      `;
+
+      // Measured before the "collapsed" class (and its max-height) is
+      // applied, so scrollHeight reflects the bar's natural, unclipped
+      // height — comparable directly against the CSS's one-row cap.
+      const chipsEl = containerEl.querySelector(".tag-filter-chips");
+      const overflowsOneRow = chipsEl.scrollHeight > COLLAPSED_HEIGHT;
+      chipsEl.classList.toggle("collapsed", overflowsOneRow && !expanded);
+      if (overflowsOneRow) {
+        const toggleHtml = html`
+          <button type="button" class="tag-filter-toggle">
+            <span class="tag-filter-toggle-label">
+              ${icon(expanded ? "chevron-up" : "chevron-down", 12)}
+              ${expanded ? "Show fewer tags" : "Show all tags"}
+            </span>
+          </button>
         `;
 
-        // Measured before the "collapsed" class (and its max-height)
-        // is applied, so scrollHeight reflects the bar's natural,
-        // unclipped height — comparable directly against the CSS's
-        // one-row cap.
-        const chipsEl = containerEl.querySelector(".tag-filter-chips");
-        const overflowsOneRow = chipsEl.scrollHeight > COLLAPSED_HEIGHT;
-        chipsEl.classList.toggle("collapsed", overflowsOneRow && !expanded);
-        if (overflowsOneRow) {
-          const toggleHtml = html`
-            <button type="button" class="tag-filter-toggle">
-              <span class="tag-filter-toggle-label">
-                ${icon(expanded ? "chevron-up" : "chevron-down", 12)}
-                ${expanded ? "Show fewer tags" : "Show all tags"}
-              </span>
-            </button>
-          `;
-
-          if (expanded) {
-            // Inserted as the *first* child (not appended) so every
-            // chip after it in the DOM floats around it (see the
-            // ".tag-filter-toggle" float rule in the <style>) — a
-            // float only affects content that follows it, so it has
-            // to come before the chips it's meant to make room for.
-            chipsEl.insertAdjacentHTML("afterbegin", toggleHtml);
-          } else {
-            // Collapsed: rendered as a sibling and overlaid on top
-            // of the one-row chip bar instead (see
-            // ".tag-filter-chips.collapsed ~ .tag-filter-toggle" in
-            // the <style>), so it visibly covers the tail end of the
-            // truncated row rather than reserving room inside it.
-            containerEl.insertAdjacentHTML("beforeend", toggleHtml);
-          }
-        }
-      },
-
-      // Handles a click anywhere in a tag filter chip bar
-      // (select/deselect a tag, clear the filter, or
-      // expand/collapse the chip bar via toggleExpanded).
-      handleClick(e, filterSet, rerender, toggleExpanded) {
-        const button = e.target.closest("button");
-        if (!button) return;
-
-        if (button.classList.contains("tag-filter-toggle")) {
-          toggleExpanded();
-        } else if (button.classList.contains("tag-filter-clear")) {
-          filterSet.clear();
+        if (expanded) {
+          // Inserted as the *first* child (not appended) so every chip
+          // after it in the DOM floats around it (see the
+          // ".tag-filter-toggle" float rule in the <style>) — a float
+          // only affects content that follows it, so it has to come
+          // before the chips it's meant to make room for.
+          chipsEl.insertAdjacentHTML("afterbegin", toggleHtml);
         } else {
-          TagFilter.toggle(filterSet, button.dataset.tag);
+          // Collapsed: rendered as a sibling and overlaid on top of
+          // the one-row chip bar instead (see
+          // ".tag-filter-chips.collapsed ~ .tag-filter-toggle" in the
+          // <style>), so it visibly covers the tail end of the
+          // truncated row rather than reserving room inside it.
+          containerEl.insertAdjacentHTML("beforeend", toggleHtml);
         }
+      }
+    }
 
-        rerender();
-      },
-    };
+    // Handles a click anywhere in a tag filter chip bar (select/deselect
+    // a tag, clear the filter, or expand/collapse the chip bar via
+    // toggleExpanded).
+    function handleClick(e, filterSet, rerender, toggleExpanded) {
+      const button = e.target.closest("button");
+      if (!button) return;
+
+      if (button.classList.contains("tag-filter-toggle")) {
+        toggleExpanded();
+      } else if (button.classList.contains("tag-filter-clear")) {
+        filterSet.clear();
+      } else {
+        toggle(filterSet, button.dataset.tag);
+      }
+
+      rerender();
+    }
+
+    return { matches, toggle, renderChips, handleClick };
   })();
 
   // Inline edit form shown in place of a row's normal content.
   // Shared by the Timers and Archived lists: both item shapes carry
   // the same title/tags/mode/originalDuration/targetTime/daysOfWeek
   // fields.
-  const EditForm = {
-    html(t) {
+  const EditForm = (() => {
+    // Named buildHtml, not html, so it doesn't shadow the outer html
+    // template-tag helper used throughout its own body.
+    function buildHtml(t) {
       const draft = editDraft || {
         title: composeTitleWithTags(t),
         value:
@@ -852,15 +850,15 @@
           ${weekdayField}
         </div>
       `;
-    },
+    }
 
     // Apply an edit form's current input values to `t` (a timer or
     // archived item — both share the same fields). Returns false
     // (leaving the edit form open) if the value field failed to
     // parse. Archived items have no endAt/paused/notified, so those
     // updates are skipped via the `"endAt" in t` guard, letting
-    // active timers and archived items share this one method.
-    apply(row, t) {
+    // active timers and archived items share this one function.
+    function apply(row, t) {
       const titleInput = $(".edit-title", row);
       const valueInput = $(".edit-value", row);
       const { title, tags } = extractTagsFromTitle(titleInput.value);
@@ -917,21 +915,20 @@
       editingId = null;
       editDraft = null;
       return true;
-    },
+    }
 
-    focusTitle(containerEl) {
+    function focusTitle(containerEl) {
       const input = $(".editing .edit-title", containerEl);
       if (input) {
         input.focus();
         input.select();
       }
-    },
+    }
 
-    // Shared Enter-to-save / Escape-to-cancel handling for both
-    // lists' edit forms. renderFn is whichever of
-    // renderActive()/renderArchived() owns the row the event
-    // originated in.
-    handleKeydown(renderFn) {
+    // Shared Enter-to-save / Escape-to-cancel handling for both lists'
+    // edit forms. renderFn is whichever of renderActive()/renderArchived()
+    // owns the row the event originated in.
+    function handleKeydown(renderFn) {
       return (e) => {
         if (!e.target.matches(".edit-title, .edit-value")) return;
 
@@ -941,8 +938,8 @@
           renderFn();
         } else if (e.key === "Enter") {
           // Ignore the Enter that confirms an IME composition (e.g.
-          // finalizing Japanese kanji conversion) — it must not
-          // also submit the edit.
+          // finalizing Japanese kanji conversion) — it must not also
+          // submit the edit.
           if (e.isComposing) return;
 
           const row = e.target.closest(".timer");
@@ -951,18 +948,18 @@
             timers.find((x) => x.id === id) ||
             archived.find((x) => x.id === id);
 
-          if (t && EditForm.apply(row, t)) {
+          if (t && apply(row, t)) {
             Storage.save();
             renderFn();
           }
         }
       };
-    },
+    }
 
-    // Keep editDraft in sync with in-progress (unsaved) edits so a
-    // full renderActive()/renderArchived() triggered by unrelated
-    // state doesn't wipe them.
-    handleInput(e) {
+    // Keep editDraft in sync with in-progress (unsaved) edits so a full
+    // renderActive()/renderArchived() triggered by unrelated state
+    // doesn't wipe them.
+    function handleInput(e) {
       if (editingId == null) return;
 
       const isWeekdayCheckbox = e.target.matches(
@@ -998,16 +995,26 @@
       } else {
         editDraft.value = e.target.value;
       }
-    },
-  };
+    }
+
+    return {
+      html: buildHtml,
+      apply,
+      focusTitle,
+      handleKeydown,
+      handleInput,
+    };
+  })();
 
   // Inline "extend by" form shown in place of a Done timer's Ends
   // At/Remaining/Status/Controls — the title (unlike EditForm.html,
   // which replaces the whole row including the title) stays put.
   // Only offered for active timers, so unlike EditForm.html this
   // doesn't need to handle the archived-item shape.
-  const SnoozeForm = {
-    html(t) {
+  const SnoozeForm = (() => {
+    // Named buildHtml, not html, so it doesn't shadow the outer html
+    // template-tag helper used throughout its own body.
+    function buildHtml(t) {
       const draft = snoozeDraft || { value: "5" };
 
       return html`
@@ -1044,16 +1051,16 @@
           </div>
         </div>
       `;
-    },
+    }
 
-    // Apply a snooze form's current input value to `t`. Returns
-    // false (leaving the form open) if the value doesn't parse to a
-    // positive duration — same mm:ss / minutes / 1h / 30s / 2d
-    // format as the Duration mode field, via Duration.parseDuration().
-    // Deliberately doesn't touch originalDuration/targetTime, so a
-    // later Restart still uses the timer's original setting rather
-    // than the snoozed length.
-    save(row, t) {
+    // Apply a snooze form's current input value to `t`. Returns false
+    // (leaving the form open) if the value doesn't parse to a positive
+    // duration — same mm:ss / minutes / 1h / 30s / 2d format as the
+    // Duration mode field, via Duration.parseDuration(). Deliberately
+    // doesn't touch originalDuration/targetTime, so a later Restart
+    // still uses the timer's original setting rather than the snoozed
+    // length.
+    function save(row, t) {
       const valueInput = $(".snooze-value", row);
       const dur = Duration.parseDuration(valueInput.value);
 
@@ -1069,21 +1076,21 @@
       snoozingId = null;
       snoozeDraft = null;
       return true;
-    },
+    }
 
-    focusValue(containerEl) {
+    function focusValue(containerEl) {
       const input = $(".snoozing .snooze-value", containerEl);
       if (input) {
         input.focus();
         input.select();
       }
-    },
+    }
 
     // Enter-to-confirm / Escape-to-cancel for the snooze form. Only
-    // active timers offer Snooze, so unlike EditForm.handleKeydown
-    // this doesn't need a renderFn parameter — it always re-renders
-    // the Timers list.
-    handleKeydown(e) {
+    // active timers offer Snooze, so unlike EditForm.handleKeydown this
+    // doesn't need a renderFn parameter — it always re-renders the
+    // Timers list.
+    function handleKeydown(e) {
       if (!e.target.matches(".snooze-value")) return;
 
       if (e.key === "Escape") {
@@ -1097,17 +1104,17 @@
         const id = Number(row?.dataset.id);
         const t = timers.find((x) => x.id === id);
 
-        if (t && SnoozeForm.save(row, t)) {
+        if (t && save(row, t)) {
           Storage.save();
           renderActive();
         }
       }
-    },
+    }
 
-    // Keep snoozeDraft in sync with in-progress (unsaved) input so
-    // a full renderActive() triggered by unrelated state doesn't
-    // reset it back to the default value.
-    handleInput(e) {
+    // Keep snoozeDraft in sync with in-progress (unsaved) input so a
+    // full renderActive() triggered by unrelated state doesn't reset it
+    // back to the default value.
+    function handleInput(e) {
       if (snoozingId == null || !e.target.matches(".snooze-value")) {
         return;
       }
@@ -1116,8 +1123,10 @@
       if (!row || Number(row.dataset.id) !== snoozingId) return;
 
       snoozeDraft = { value: e.target.value };
-    },
-  };
+    }
+
+    return { html: buildHtml, save, focusValue, handleKeydown, handleInput };
+  })();
 
   const timersTagFilterEl = $("#timers-tag-filter");
 
