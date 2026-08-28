@@ -4,7 +4,7 @@ A flexible multi-timer web app with tags, timer modes, and archiving.
 
 ## Usage
 
-Just open `index.html` in your browser.
+Just open `index.html` in your browser, or use the hosted version at https://kg8m.github.io/flex-timer/.
 
 ## Features
 
