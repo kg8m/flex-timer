@@ -1842,8 +1842,71 @@
     };
   })();
 
+  /**
+   * Captures which field (if any) inside `containerEl` currently has
+   * focus, so a full rebuild (e.g. renderActive() below) can restore
+   * it afterward instead of dropping focus out of the edit/snooze
+   * form the moment an unrelated timer finishes mid-edit — the
+   * rebuilt row is a brand-new DOM node even when editDraft/
+   * snoozeDraft keep its *value* unchanged.
+   *
+   * @param {Element} containerEl
+   * @returns {{id: string, selector: string, selectionStart: number|null, selectionEnd: number|null}|null}
+   */
+  function captureFocus(containerEl) {
+    const active = document.activeElement;
+    if (!active || !containerEl.contains(active)) return null;
+
+    if (active.tagName !== "INPUT") return null;
+
+    const row = active.closest(".timer");
+    if (!row) return null;
+
+    // Every EditForm/SnoozeForm text/time input carries exactly one
+    // distinguishing class (.edit-title/.edit-value/.snooze-value),
+    // which is enough to re-find it after a rebuild — so this needs
+    // no per-field branch as more fields are added. The one exception
+    // is the class-less weekday checkboxes, uniquely identified within
+    // a row by data-day instead.
+    const selector = active.classList.length
+      ? `.${[...active.classList].join(".")}`
+      : active.dataset.day != null
+        ? `input[data-day="${active.dataset.day}"]`
+        : null;
+    if (!selector) return null;
+
+    return {
+      id: row.dataset.id,
+      selector,
+      selectionStart: "selectionStart" in active ? active.selectionStart : null,
+      selectionEnd: "selectionEnd" in active ? active.selectionEnd : null,
+    };
+  }
+
+  /**
+   * Restores focus captured by captureFocus() above, once the rebuilt
+   * row is back in the DOM.
+   *
+   * @param {Element} containerEl
+   * @param {ReturnType<typeof captureFocus>} saved
+   */
+  function restoreFocus(containerEl, saved) {
+    if (!saved) return;
+
+    const row = containerEl.querySelector(`.timer[data-id="${saved.id}"]`);
+    const el = row && row.querySelector(saved.selector);
+    if (!el) return;
+
+    el.focus();
+    if (saved.selectionStart != null && "setSelectionRange" in el) {
+      el.setSelectionRange(saved.selectionStart, saved.selectionEnd);
+    }
+  }
+
   /** Fully rebuilds the Active list (`#timers`) from `timers`. */
   function renderActive() {
+    const savedFocus = captureFocus(listEl);
+
     TagFilter.renderChips(
       timersTagFilterEl,
       timers,
@@ -1884,6 +1947,8 @@
 
       listEl.appendChild(row);
     }
+
+    restoreFocus(listEl, savedFocus);
   }
 
   const trashListEl = $("#trash-list");
