@@ -294,6 +294,31 @@ button.neutral:hover {
   font-size: 13px;
 }
 
+/* A list's "no items" message (#timers-empty/#trash-empty/#archive-empty).
+         margin-bottom matches .tag-filter's own margin-bottom above it, so
+         the message sits centered in an even gap instead of crowding
+         straight into the card's bottom padding when it's the last thing
+         showing (filtered down to zero items, with no header/footer/rows
+         below it to add their own spacing). The inline "Clear filter"
+         button (see TagFilter.renderEmptyState()) needs its own row to sit
+         in, hence flex + gap rather than plain inline content. */
+.list-empty {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+/* .tag-filter-clear's own margin-bottom (see the shared
+         .tag-filter-chip/.tag-filter-clear rule) exists for the chip bar's
+         wrapped rows and isn't wanted on this bare flex row — left in
+         place, it throws off align-items: center by making the button's
+         margin box taller than its content box on one side only. */
+.list-empty .tag-filter-clear {
+  margin: 0;
+}
+
 .list {
   margin-top: 18px;
 }

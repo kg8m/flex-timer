@@ -987,7 +987,29 @@
       rerender();
     }
 
-    return { matches, toggle, renderChips, handleClick };
+    /**
+     * Renders a list's "no items" message, adding an inline "Clear
+     * filter" button when a tag filter is why nothing is shown — so it
+     * can be reset right there, without opening a possibly collapsed
+     * chip bar (see renderChips()) just to reach the one inside it.
+     *
+     * @param {Element} el
+     * @param {boolean} itemsExist - whether the list has any items at all, before filtering.
+     * @param {string} matchText - shown when items exist but none match the filter.
+     * @param {string} emptyText - shown when the list has no items at all.
+     * @param {Set<string>} filterSet
+     */
+    function renderEmptyState(el, itemsExist, matchText, emptyText, filterSet) {
+      const text = itemsExist ? matchText : emptyText;
+      el.innerHTML = filterSet.size
+        ? html`
+            ${escapeHtml(text)}
+            <button type="button" class="tag-filter-clear">Clear filter</button>
+          `
+        : escapeHtml(text);
+    }
+
+    return { matches, toggle, renderChips, handleClick, renderEmptyState };
   })();
 
   /**
@@ -1925,9 +1947,13 @@
     }
 
     timersEmptyEl.style.display = sorted.length ? "none" : "";
-    timersEmptyEl.textContent = timers.length
-      ? "No timers match the selected tags."
-      : "No timers.";
+    TagFilter.renderEmptyState(
+      timersEmptyEl,
+      timers.length > 0,
+      "No timers match the selected tags.",
+      "No timers.",
+      timersTagFilter,
+    );
     timersHeaderEl.style.display = sorted.length ? "" : "none";
     timersFooterEl.style.display = timers.length ? "" : "none";
 
@@ -2029,9 +2055,13 @@
       .sort((a, b) => a.deletedAt - b.deletedAt);
 
     trashEmptyEl.style.display = sorted.length ? "none" : "";
-    trashEmptyEl.textContent = trash.length
-      ? "No trashed timers match the selected tags."
-      : "Trash is empty.";
+    TagFilter.renderEmptyState(
+      trashEmptyEl,
+      trash.length > 0,
+      "No trashed timers match the selected tags.",
+      "Trash is empty.",
+      trashTagFilter,
+    );
     trashHeaderEl.style.display = sorted.length ? "" : "none";
     trashListEl.innerHTML = "";
 
@@ -2154,9 +2184,13 @@
       .sort((a, b) => b.archivedAt - a.archivedAt);
 
     archiveEmptyEl.style.display = sorted.length ? "none" : "";
-    archiveEmptyEl.textContent = archived.length
-      ? "No archived timers match the selected tags."
-      : "No archived timers.";
+    TagFilter.renderEmptyState(
+      archiveEmptyEl,
+      archived.length > 0,
+      "No archived timers match the selected tags.",
+      "No archived timers.",
+      archiveTagFilter,
+    );
     archiveHeaderEl.style.display = sorted.length ? "" : "none";
     archiveListEl.innerHTML = "";
 
@@ -2728,6 +2762,26 @@
     });
   });
   archiveTagFilterEl.addEventListener("click", (e) => {
+    TagFilter.handleClick(e, archiveTagFilter, renderArchived, () => {
+      archiveTagFilterExpanded = !archiveTagFilterExpanded;
+    });
+  });
+
+  // Each list's empty-state message only ever contains a "Clear
+  // filter" button (never the chip bar's expand/collapse toggle), but
+  // handleClick() is shared with the chip bar listeners above, so it
+  // still needs a toggleExpanded callback to satisfy that signature.
+  timersEmptyEl.addEventListener("click", (e) => {
+    TagFilter.handleClick(e, timersTagFilter, renderActive, () => {
+      timersTagFilterExpanded = !timersTagFilterExpanded;
+    });
+  });
+  trashEmptyEl.addEventListener("click", (e) => {
+    TagFilter.handleClick(e, trashTagFilter, renderTrash, () => {
+      trashTagFilterExpanded = !trashTagFilterExpanded;
+    });
+  });
+  archiveEmptyEl.addEventListener("click", (e) => {
     TagFilter.handleClick(e, archiveTagFilter, renderArchived, () => {
       archiveTagFilterExpanded = !archiveTagFilterExpanded;
     });
