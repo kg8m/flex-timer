@@ -128,6 +128,22 @@
                 <input type="checkbox" id="day-0" data-day="0" />
                 <label for="day-0">Sun</label>
               </div>
+              <!-- Mutually exclusive with the weekday checkboxes above
+                   (see the change/input listeners in app.js): picking a
+                   weekday resets this to 1, and setting it above 1
+                   clears any checked weekday. -->
+              <div class="interval-days-row">
+                <label for="interval-days">Every</label>
+                <input
+                  type="number"
+                  id="interval-days"
+                  name="interval-days"
+                  class="interval-days-input"
+                  min="1"
+                  value="1"
+                />
+                <label for="interval-days">day(s)</label>
+              </div>
             </div>
 
             <div class="field">

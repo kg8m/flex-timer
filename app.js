@@ -17,7 +17,8 @@
    * @property {number} [remainingAtPause] - ms remaining when Pause was pressed.
    * @property {number} originalDuration - configured duration in ms; the "duration" mode target, and preserved across "time" mode for Restart.
    * @property {string} [targetTime] - "HH:MM" or "HH:MM:SS"; the "time" mode target.
-   * @property {number[]} [daysOfWeek] - Date#getDay() values (0=Sunday) restricting a "time" mode timer; empty/undefined means every day.
+   * @property {number[]} [daysOfWeek] - Date#getDay() values (0=Sunday) restricting a "time" mode timer; empty/undefined means every day. Mutually exclusive with intervalDays.
+   * @property {number} [intervalDays] - repeat interval in days for a "time" mode timer once its target time has passed; undefined/1 means every day. Mutually exclusive with daysOfWeek.
    */
 
   /**
@@ -33,6 +34,7 @@
    * @property {number} originalDuration
    * @property {string} [targetTime]
    * @property {number[]} [daysOfWeek]
+   * @property {number} [intervalDays]
    * @property {number} deletedAt - epoch ms; purged once TRASH_RETENTION_MS elapses.
    */
 
@@ -45,6 +47,7 @@
    * @property {number} originalDuration
    * @property {string} [targetTime]
    * @property {number[]} [daysOfWeek]
+   * @property {number} [intervalDays]
    * @property {number} archivedAt - epoch ms.
    */
 
@@ -260,6 +263,20 @@
     }
 
     /**
+     * "every N days" label for a "time" mode timer's intervalDays
+     * repeat, or "" when it's the default (undefined/1), which reads as
+     * plain daily and needs no callout.
+     *
+     * @param {number} [intervalDays]
+     * @returns {string}
+     */
+    function intervalDaysLabel(intervalDays) {
+      return intervalDays && intervalDays > 1
+        ? `every ${intervalDays} days`
+        : "";
+    }
+
+    /**
      * Push `target` forward in 24h steps until it lands on a day-of-week
      * present in `daysOfWeek` (0=Sunday..6=Saturday, matching
      * Date#getDay()). A no-op when daysOfWeek is empty/undefined, which
@@ -286,16 +303,24 @@
 
     /**
      * Resolve "HH:MM" or "HH:MM:SS" to the next occurrence of that time
-     * (today if it hasn't passed yet, otherwise tomorrow), further
-     * restricted to daysOfWeek if given. Seconds are optional and
-     * default to 0.
+     * (today if it hasn't passed yet, otherwise `intervalDays` days out —
+     * 1 by default, i.e. tomorrow), further restricted to daysOfWeek if
+     * given (daysOfWeek and intervalDays are mutually exclusive; when
+     * daysOfWeek is set, callers pass intervalDays as 1/undefined).
+     * Seconds are optional and default to 0.
      *
      * @param {string} timeStr
      * @param {number} [now] - epoch ms.
      * @param {number[]} [daysOfWeek]
+     * @param {number} [intervalDays]
      * @returns {number|null} epoch ms, or null if `timeStr` doesn't parse.
      */
-    function computeNextTimeBasedEndAt(timeStr, now = Date.now(), daysOfWeek) {
+    function computeNextTimeBasedEndAt(
+      timeStr,
+      now = Date.now(),
+      daysOfWeek,
+      intervalDays = 1,
+    ) {
       const m = String(timeStr || "").match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
       if (!m) return null;
 
@@ -306,7 +331,7 @@
       d.setHours(hh, mm, ss, 0);
 
       let target = d.getTime();
-      if (target <= now) target += 24 * 60 * 60 * 1000;
+      if (target <= now) target += intervalDays * 24 * 60 * 60 * 1000;
 
       return advanceToAllowedDay(target, daysOfWeek);
     }
@@ -318,6 +343,7 @@
       WEEKDAY_LABELS,
       WEEKDAY_DISPLAY_ORDER,
       daysOfWeekLabel,
+      intervalDaysLabel,
       computeNextTimeBasedEndAt,
     };
   })();
@@ -450,7 +476,12 @@
    */
   function computeRestartEndAt(t, now = Date.now()) {
     if (t.mode === "time") {
-      return Clock.computeNextTimeBasedEndAt(t.targetTime, now, t.daysOfWeek);
+      return Clock.computeNextTimeBasedEndAt(
+        t.targetTime,
+        now,
+        t.daysOfWeek,
+        t.intervalDays,
+      );
     }
 
     return Duration.alignEndAtToSecond(now + t.originalDuration);
@@ -490,17 +521,22 @@
 
   /**
    * Fallback title for an untitled timer: formatTimerLabel(t), with a
-   * day-of-week restriction prefixed (e.g. "Mon 10:00") since this is
-   * the one place that restriction is visible without hovering the
-   * mode badge's tooltip.
+   * day-of-week restriction or an intervalDays repeat (mutually
+   * exclusive; e.g. "Mon 10:00" or "every 3 days 10:00") prefixed since
+   * this is the one place that restriction is visible without hovering
+   * the mode badge's tooltip.
    *
    * @param {ActiveTimer|TrashTimer|ArchivedTimer} t
    * @returns {string}
    */
   function formatFallbackTitle(t) {
     const label = formatTimerLabel(t);
-    const days = t.mode === "time" ? Clock.daysOfWeekLabel(t.daysOfWeek) : "";
-    return days ? `${days} ${label}` : label;
+    const prefix =
+      t.mode === "time"
+        ? Clock.daysOfWeekLabel(t.daysOfWeek) ||
+          Clock.intervalDaysLabel(t.intervalDays)
+        : "";
+    return prefix ? `${prefix} ${label}` : label;
   }
 
   /**
@@ -655,9 +691,12 @@
      */
     function modeBadge(t) {
       const isTime = t.mode === "time";
-      const days = isTime ? Clock.daysOfWeekLabel(t.daysOfWeek) : "";
+      const repeat = isTime
+        ? Clock.daysOfWeekLabel(t.daysOfWeek) ||
+          Clock.intervalDaysLabel(t.intervalDays)
+        : "";
       const label = isTime
-        ? `At time: ${formatTimerLabel(t)}${days ? ` — ${days}` : ""}`
+        ? `At time: ${formatTimerLabel(t)}${repeat ? ` — ${repeat}` : ""}`
         : `Duration: ${Duration.formatDurationLabel(t.originalDuration)}`;
 
       return html`
@@ -805,7 +844,7 @@
   // re-render.
   /** @type {number|null} */
   let editingId = null;
-  /** @type {{title: string, value: string, daysOfWeek?: number[]}|null} */
+  /** @type {{title: string, value: string, daysOfWeek?: number[], intervalDays?: number}|null} */
   let editDraft = null;
 
   // snoozingId/snoozeDraft mirror editingId/editDraft above, but for
@@ -1033,6 +1072,7 @@
             ? t.targetTime
             : Duration.durationToEditableString(t.originalDuration),
         daysOfWeek: t.daysOfWeek,
+        intervalDays: t.intervalDays,
       };
 
       const valueField =
@@ -1082,6 +1122,18 @@
                     </label>
                   `,
                 ).join("")}
+              </div>
+              <div class="interval-days-row">
+                <label for="edit-interval-days-${t.id}">Every</label>
+                <input
+                  type="number"
+                  id="edit-interval-days-${t.id}"
+                  class="interval-days-input"
+                  min="1"
+                  aria-label="Repeat every N days"
+                  value="${draft.intervalDays || 1}"
+                />
+                <label for="edit-interval-days-${t.id}">day(s)</label>
               </div>
             `
           : "";
@@ -1142,10 +1194,12 @@
       if (t.mode === "time") {
         const targetTime = valueInput.value;
         const daysOfWeek = readDaysOfWeek(row);
+        const intervalDays = daysOfWeek ? undefined : readIntervalDays(row);
         const endAt = Clock.computeNextTimeBasedEndAt(
           targetTime,
           now,
           daysOfWeek,
+          intervalDays,
         );
 
         if (!targetTime || endAt == null) {
@@ -1155,6 +1209,7 @@
 
         t.targetTime = targetTime;
         t.daysOfWeek = daysOfWeek;
+        t.intervalDays = intervalDays;
         if ("endAt" in t) {
           t.endAt = endAt;
           t.notified = false;
@@ -1212,7 +1267,8 @@
      */
     function handleKeydown(renderFn) {
       return (e) => {
-        if (!e.target.matches(".edit-title, .edit-value")) return;
+        if (!e.target.matches(".edit-title, .edit-value, .interval-days-input"))
+          return;
 
         if (e.key === "Escape") {
           editingId = null;
@@ -1251,7 +1307,12 @@
       const isWeekdayCheckbox = e.target.matches(
         '.weekday-toggle-row input[type="checkbox"]',
       );
-      if (!isWeekdayCheckbox && !e.target.matches(".edit-title, .edit-value")) {
+      const isIntervalInput = e.target.matches(".interval-days-input");
+      if (
+        !isWeekdayCheckbox &&
+        !isIntervalInput &&
+        !e.target.matches(".edit-title, .edit-value")
+      ) {
         return;
       }
 
@@ -1271,6 +1332,7 @@
               ? t.targetTime
               : Duration.durationToEditableString(t.originalDuration),
           daysOfWeek: t.daysOfWeek,
+          intervalDays: t.intervalDays,
         };
       }
 
@@ -1278,6 +1340,20 @@
         editDraft.title = e.target.value;
       } else if (isWeekdayCheckbox) {
         editDraft.daysOfWeek = readDaysOfWeek(row);
+        // Mutually exclusive with intervalDays: picking a weekday resets
+        // the interval input back to its every-day default.
+        if (editDraft.daysOfWeek) {
+          editDraft.intervalDays = undefined;
+          setIntervalDaysInput(row, undefined);
+        }
+      } else if (isIntervalInput) {
+        editDraft.intervalDays = readIntervalDays(row);
+        // Mutually exclusive with daysOfWeek: setting an interval > 1
+        // clears any weekday restriction.
+        if (editDraft.intervalDays) {
+          editDraft.daysOfWeek = undefined;
+          setDaysOfWeekCheckboxes(row, undefined);
+        }
       } else {
         editDraft.value = e.target.value;
       }
@@ -1499,6 +1575,7 @@
      * @property {boolean} crossDay - whether Ends At falls on a different day than today.
      * @property {boolean} paused
      * @property {"duration"|"time"} mode
+     * @property {number} [intervalDays]
      */
 
     /**
@@ -1557,6 +1634,7 @@
         crossDay,
         paused: t.paused,
         mode: t.mode,
+        intervalDays: t.intervalDays,
       };
     }
 
@@ -1657,10 +1735,15 @@
      * @returns {string}
      */
     function skipButton(vm) {
+      const tooltip =
+        vm.intervalDays && vm.intervalDays > 1
+          ? `Skip to next occurrence (${vm.intervalDays} days)`
+          : "Skip to next day";
+
       return !vm.done && !vm.paused && vm.mode === "time"
         ? actionButton({
             act: "skip",
-            tooltip: "Skip to next day",
+            tooltip,
             icon: "skip-forward",
             class: "accent",
           })
@@ -2089,6 +2172,7 @@
       originalDuration: t.originalDuration,
       targetTime: t.targetTime,
       daysOfWeek: t.daysOfWeek,
+      intervalDays: t.intervalDays,
       tags: t.tags || [],
       deletedAt: Duration.alignEndAtToSecond(Date.now()),
     });
@@ -2225,6 +2309,7 @@
       originalDuration: t.originalDuration,
       targetTime: t.targetTime,
       daysOfWeek: t.daysOfWeek,
+      intervalDays: t.intervalDays,
       tags: t.tags || [],
       archivedAt: Date.now(),
     });
@@ -2256,6 +2341,7 @@
   const weekdayFieldEl = $("#weekday-field");
   const durationInputEl = $("#duration");
   const targetTimeInputEl = $("#target-time");
+  const intervalDaysInputEl = $("#interval-days");
 
   /**
    * Read the checked days from a .weekday-toggle-row's checkboxes
@@ -2296,6 +2382,36 @@
   }
 
   /**
+   * Read the "every N days" input's value within `container`,
+   * returning undefined (meaning "every day", the default) when it's
+   * empty, 1, or not a positive integer. Mutually exclusive with
+   * daysOfWeek — kept in sync with it via the change listeners below,
+   * so this is normally only non-undefined when no weekday is checked.
+   * Shared by the add-timer form and the inline edit row, both of
+   * which render one .interval-days-input.
+   *
+   * @param {ParentNode} container
+   * @returns {number|undefined}
+   */
+  function readIntervalDays(container) {
+    const input = container.querySelector(".interval-days-input");
+    const n = Math.floor(Number(input?.value));
+    return n > 1 ? n : undefined;
+  }
+
+  /**
+   * Set a .interval-days-input's value within `container` to reflect
+   * `intervalDays` (undefined means every day, shown as 1).
+   *
+   * @param {ParentNode} container
+   * @param {number} [intervalDays]
+   */
+  function setIntervalDaysInput(container, intervalDays) {
+    const input = container.querySelector(".interval-days-input");
+    if (input) input.value = String(intervalDays || 1);
+  }
+
+  /**
    * Shows the Duration or At-time fields (and toggles their `required`
    * attributes) to match the currently-selected mode radio, then
    * refocuses the title field.
@@ -2327,6 +2443,22 @@
     });
   });
 
+  // Days of week and "every N days" are mutually exclusive: picking a
+  // weekday resets the interval back to its every-day default, and
+  // setting an interval > 1 clears any weekday restriction.
+  $("#timer-form")
+    .querySelectorAll('.weekday-toggle-row input[type="checkbox"]')
+    .forEach((cb) => {
+      cb.addEventListener("change", () => {
+        if (cb.checked) setIntervalDaysInput($("#timer-form"), undefined);
+      });
+    });
+  intervalDaysInputEl.addEventListener("input", () => {
+    if (readIntervalDays($("#timer-form"))) {
+      setDaysOfWeekCheckboxes($("#timer-form"), undefined);
+    }
+  });
+
   updateModeFieldsVisibility();
 
   // Create timer (Enter or button click)
@@ -2337,12 +2469,20 @@
     const mode = $('input[name="mode"]:checked').value;
     const now = Date.now();
 
-    let endAt, originalDuration, targetTime, daysOfWeek;
+    let endAt, originalDuration, targetTime, daysOfWeek, intervalDays;
 
     if (mode === "time") {
       targetTime = targetTimeInputEl.value;
       daysOfWeek = readDaysOfWeek($("#timer-form"));
-      endAt = Clock.computeNextTimeBasedEndAt(targetTime, now, daysOfWeek);
+      intervalDays = daysOfWeek
+        ? undefined
+        : readIntervalDays($("#timer-form"));
+      endAt = Clock.computeNextTimeBasedEndAt(
+        targetTime,
+        now,
+        daysOfWeek,
+        intervalDays,
+      );
 
       if (!targetTime || endAt == null) {
         alert("Enter a valid time (HH:MM or HH:MM:SS).");
@@ -2373,12 +2513,14 @@
       originalDuration,
       targetTime,
       daysOfWeek,
+      intervalDays,
     });
 
     $("#title").value = "";
     $("#duration").value = "";
     targetTimeInputEl.value = "";
     setDaysOfWeekCheckboxes($("#timer-form"), undefined);
+    setIntervalDaysInput($("#timer-form"), undefined);
     $("#mode-duration").checked = true;
     updateModeFieldsVisibility();
 
@@ -2461,6 +2603,7 @@
         t.targetTime,
         t.endAt,
         t.daysOfWeek,
+        t.intervalDays,
       );
       t.snoozed = false;
       Storage.save();
@@ -2626,6 +2769,7 @@
       originalDuration: t.originalDuration,
       targetTime: t.targetTime,
       daysOfWeek: t.daysOfWeek,
+      intervalDays: t.intervalDays,
     };
   }
 

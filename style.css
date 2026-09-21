@@ -187,6 +187,25 @@ h1 {
   outline-offset: 2px;
 }
 
+.interval-days-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.interval-days-row label {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.interval-days-input {
+  width: 56px;
+  padding: 0 8px;
+  text-align: center;
+}
+
 input,
 button {
   box-sizing: border-box;
@@ -642,6 +661,12 @@ details[open] > .list-summary::before {
          their line by .edit-row's flex-wrap. */
 .edit-row .weekday-toggle-row {
   flex: 1 1 100%;
+}
+
+/* Its own line below the weekday toggles, same reasoning. */
+.edit-row .interval-days-row {
+  flex: 1 1 100%;
+  margin-top: 0;
 }
 
 /* Unlike the Duration text input, a native time widget can't reflow
