@@ -3124,14 +3124,21 @@
      * doesn't duplicate them.
      *
      * @param {ReturnType<typeof parse>} data
+     * @returns {{timers: number, archived: number}} how many of each were added.
      */
     function merge(data) {
+      const before = { timers: timers.length, archived: archived.length };
       timers = mergeList(timers, data.timers, (t) => t.createdAt);
       archived = mergeList(archived, data.archived, (t) => t.archivedAt);
 
       Storage.save();
       renderActive();
       renderArchived();
+
+      return {
+        timers: timers.length - before.timers,
+        archived: archived.length - before.archived,
+      };
     }
 
     return { exportToFile, parse, overwrite, merge };
@@ -3170,6 +3177,8 @@
   /** Parsed file awaiting the user's choice in #import-dialog. */
   let pendingImport = null;
 
+  const count = (n, noun) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+
   $("#import-data").addEventListener("click", () => {
     setAppMenuOpen(false);
     // Reset so picking the same file again still fires "change".
@@ -3188,7 +3197,6 @@
       return;
     }
 
-    const count = (n, noun) => `${n} ${noun}${n === 1 ? "" : "s"}`;
     $("#import-dialog-summary").textContent =
       `${file.name} (exported ${new Date(pendingImport.exportedAt).toLocaleString()}) ` +
       `contains ${count(pendingImport.timers.length, "timer")} and ` +
@@ -3200,12 +3208,41 @@
   // returnValue is the clicked button's value (see <form method="dialog">),
   // or "" when dismissed with Escape.
   importDialogEl.addEventListener("close", () => {
-    if (importDialogEl.returnValue === "overwrite") {
-      Backup.overwrite(pendingImport);
-    } else if (importDialogEl.returnValue === "merge") {
-      Backup.merge(pendingImport);
-    }
+    const data = pendingImport;
     pendingImport = null;
+    let message;
+
+    if (importDialogEl.returnValue === "overwrite") {
+      Backup.overwrite(data);
+      message =
+        `Replaced current timers with ${count(data.timers.length, "timer")} ` +
+        `and ${count(data.archived.length, "archived timer")} from the file.`;
+    } else if (importDialogEl.returnValue === "merge") {
+      const added = Backup.merge(data);
+      const skipped =
+        data.timers.length +
+        data.archived.length -
+        added.timers -
+        added.archived;
+      message =
+        added.timers + added.archived === 0
+          ? "Nothing to add: everything in the file is already present."
+          : `Added ${[
+              added.timers && count(added.timers, "timer"),
+              added.archived && count(added.archived, "archived timer"),
+            ]
+              .filter(Boolean)
+              .join(" and ")}.` +
+            (skipped ? ` Skipped ${skipped} already present.` : "");
+    } else {
+      return;
+    }
+
+    // The result may look identical to before (e.g. re-importing the same
+    // file), so say what happened. Deferred past the next paint because
+    // alert() blocks rendering, which would otherwise hold back the
+    // re-rendered lists until it's dismissed.
+    requestAnimationFrame(() => setTimeout(() => alert(message)));
   });
 
   // Clear all timers
