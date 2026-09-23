@@ -51,6 +51,53 @@ h1 {
   margin: 0;
 }
 
+/* Page-level menu (Export/Import) in the header's otherwise empty right
+         side. Same open/close mechanism as .row-menu (an .open class
+         toggled by the script), but right-aligned under its toggle since
+         it sits at the page's right edge. */
+.app-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+#app-menu-toggle {
+  padding: 8px;
+  min-width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-menu-popover {
+  display: none;
+  flex-direction: column;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  /* Above .sticky-form's z-index: 1, which it overlaps when opened. */
+  z-index: 2;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.app-menu.open .app-menu-popover {
+  display: flex;
+}
+
+.app-menu-popover button {
+  text-align: left;
+}
+
+.app-menu.open > button {
+  background: rgba(156, 163, 175, 0.12);
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--border);

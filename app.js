@@ -2956,6 +2956,72 @@
     });
   });
 
+  /**
+   * Saves/restores timers as a JSON file, so they can be carried to
+   * another device or browser without a server. Trash is left out: its
+   * items are purged within TRASH_RETENTION_MS anyway, so they'd mostly
+   * have expired by the time the file is imported elsewhere.
+   */
+  const Backup = (() => {
+    const FORMAT = "flex-timer";
+    const VERSION = 1;
+
+    /** Downloads the current state as `flex-timer-YYYYMMDD-HHMMSS.json`. */
+    function exportToFile() {
+      const now = new Date();
+      const data = {
+        format: FORMAT,
+        version: VERSION,
+        exportedAt: now.getTime(),
+        seq,
+        timers,
+        archived,
+      };
+      const stamp =
+        `${now.getFullYear()}${fmt2(now.getMonth() + 1)}${fmt2(now.getDate())}` +
+        `-${fmt2(now.getHours())}${fmt2(now.getMinutes())}${fmt2(now.getSeconds())}`;
+
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+      );
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `flex-timer-${stamp}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url));
+    }
+
+    return { exportToFile };
+  })();
+
+  const appMenuEl = $(".app-menu");
+  const appMenuToggleEl = $("#app-menu-toggle");
+
+  /** @param {boolean} open */
+  function setAppMenuOpen(open) {
+    appMenuEl.classList.toggle("open", open);
+    appMenuToggleEl.setAttribute("aria-expanded", String(open));
+  }
+
+  appMenuToggleEl.addEventListener("click", () => {
+    setAppMenuOpen(!appMenuEl.classList.contains("open"));
+  });
+
+  // Close the header menu on outside click or Escape, like .row-menu.
+  document.addEventListener("click", (e) => {
+    if (!appMenuEl.contains(e.target)) setAppMenuOpen(false);
+  });
+  appMenuEl.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    setAppMenuOpen(false);
+    appMenuToggleEl.focus();
+  });
+
+  $("#export-data").addEventListener("click", () => {
+    setAppMenuOpen(false);
+    Backup.exportToFile();
+  });
+
   // Clear all timers
   $("#clear-all").addEventListener("click", () => {
     if (timers.length === 0) return;
