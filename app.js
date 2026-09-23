@@ -1245,13 +1245,22 @@
         const delta = dur - t.originalDuration;
         t.originalDuration = dur;
         if ("endAt" in t) {
-          if (t.paused) {
-            t.remainingAtPause = clamp0((t.remainingAtPause || 0) + delta);
-          } else {
-            t.endAt += delta;
+          const done = !t.paused && now >= t.endAt;
+
+          // Same policy as the At-time branch above: a Done or Snoozed
+          // run keeps its current completion time (or frozen remaining
+          // time, if paused mid-snooze) as-is — editing only updates
+          // the duration for the next Restart. A still counting-down
+          // run is only shifted when the duration itself changed.
+          if (!done && !t.snoozed && delta !== 0) {
+            if (t.paused) {
+              t.remainingAtPause = clamp0((t.remainingAtPause || 0) + delta);
+            } else {
+              t.endAt += delta;
+            }
+            t.notified = false;
+            t.snoozed = false;
           }
-          t.notified = false;
-          t.snoozed = false;
         }
       }
 
