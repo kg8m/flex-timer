@@ -43,9 +43,35 @@
           </button>
           <div class="app-menu-popover">
             <button id="export-data" type="button">Export data...</button>
+            <button id="import-data" type="button">Import data...</button>
           </div>
+          <!-- Opened by #import-data's click handler -->
+          <input
+            type="file"
+            id="import-file"
+            accept=".json,application/json"
+            aria-label="Import file"
+            hidden
+          />
         </div>
       </div>
+
+      <dialog id="import-dialog" aria-labelledby="import-dialog-title">
+        <form method="dialog">
+          <h2 id="import-dialog-title">Import data</h2>
+          <p id="import-dialog-summary">
+            <!-- File summary goes here: set by #import-file's change handler -->
+          </p>
+          <p class="help">
+            Overwrite replaces all current timers and archived timers. Trash is
+            kept as is.
+          </p>
+          <div class="dialog-actions">
+            <button class="neutral" value="cancel">Cancel</button>
+            <button class="danger" value="overwrite">Overwrite</button>
+          </div>
+        </form>
+      </dialog>
 
       <div class="sticky-sentinel" aria-hidden="true">
         <!-- Intentionally empty: IntersectionObserver target used by updateStickyState() -->

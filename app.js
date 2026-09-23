@@ -2991,7 +2991,91 @@
       setTimeout(() => URL.revokeObjectURL(url));
     }
 
-    return { exportToFile };
+    const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+
+    /**
+     * Checks the fields shared by active and archived timers, i.e. the
+     * ones rendering and `computeRestartEndAt` rely on being present.
+     */
+    function isValidTimerBase(t) {
+      return (
+        t !== null &&
+        typeof t === "object" &&
+        isNum(t.id) &&
+        typeof t.title === "string" &&
+        Array.isArray(t.tags) &&
+        t.tags.every((tag) => typeof tag === "string") &&
+        (t.mode === "duration"
+          ? isNum(t.originalDuration)
+          : t.mode === "time" && typeof t.targetTime === "string")
+      );
+    }
+
+    /**
+     * Parses and validates an exported file's text.
+     *
+     * @param {string} text
+     * @returns {{seq: number, exportedAt: number, timers: ActiveTimer[], archived: ArchivedTimer[]}}
+     * @throws {Error} with a user-facing message when `text` isn't a valid export.
+     */
+    function parse(text) {
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error("The file is not valid JSON.");
+      }
+
+      if (data?.format !== FORMAT) {
+        throw new Error("The file is not a Flex Timer export.");
+      }
+      if (data.version !== VERSION) {
+        throw new Error(`Unsupported export version: ${data.version}.`);
+      }
+      if (
+        !isNum(data.seq) ||
+        !isNum(data.exportedAt) ||
+        !Array.isArray(data.timers) ||
+        !Array.isArray(data.archived) ||
+        !data.timers.every(
+          (t) => isValidTimerBase(t) && isNum(t.endAt) && isNum(t.createdAt),
+        ) ||
+        !data.archived.every((t) => isValidTimerBase(t) && isNum(t.archivedAt))
+      ) {
+        throw new Error("The file contains malformed timer data.");
+      }
+
+      return data;
+    }
+
+    /**
+     * Replaces the active and archived lists with `data`'s. Local trash
+     * is kept (exports don't carry one), so `seq` is also bumped past
+     * its ids to keep new ids from colliding with them.
+     *
+     * @param {ReturnType<typeof parse>} data
+     */
+    function overwrite(data) {
+      timers = data.timers;
+      archived = data.archived;
+      const maxId = Math.max(
+        0,
+        ...[...timers, ...archived, ...trash].map((t) => t.id),
+      );
+      seq = Math.max(data.seq, maxId + 1);
+
+      // The row being edited/snoozed may no longer exist.
+      editingId = null;
+      editDraft = null;
+      snoozingId = null;
+      snoozeDraft = null;
+
+      Storage.save();
+      renderActive();
+      renderArchived();
+    }
+
+    return { exportToFile, parse, overwrite };
   })();
 
   const appMenuEl = $(".app-menu");
@@ -3020,6 +3104,47 @@
   $("#export-data").addEventListener("click", () => {
     setAppMenuOpen(false);
     Backup.exportToFile();
+  });
+
+  const importFileEl = $("#import-file");
+  const importDialogEl = $("#import-dialog");
+  /** Parsed file awaiting the user's choice in #import-dialog. */
+  let pendingImport = null;
+
+  $("#import-data").addEventListener("click", () => {
+    setAppMenuOpen(false);
+    // Reset so picking the same file again still fires "change".
+    importFileEl.value = "";
+    importFileEl.click();
+  });
+
+  importFileEl.addEventListener("change", async () => {
+    const file = importFileEl.files[0];
+    if (!file) return;
+
+    try {
+      pendingImport = Backup.parse(await file.text());
+    } catch (e) {
+      alert(`Couldn't import ${file.name}: ${e.message}`);
+      return;
+    }
+
+    const count = (n, noun) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+    $("#import-dialog-summary").textContent =
+      `${file.name} (exported ${new Date(pendingImport.exportedAt).toLocaleString()}) ` +
+      `contains ${count(pendingImport.timers.length, "timer")} and ` +
+      `${count(pendingImport.archived.length, "archived timer")}.`;
+    importDialogEl.returnValue = "";
+    importDialogEl.showModal();
+  });
+
+  // returnValue is the clicked button's value (see <form method="dialog">),
+  // or "" when dismissed with Escape.
+  importDialogEl.addEventListener("close", () => {
+    if (importDialogEl.returnValue === "overwrite") {
+      Backup.overwrite(pendingImport);
+    }
+    pendingImport = null;
   });
 
   // Clear all timers
