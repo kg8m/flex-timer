@@ -3144,6 +3144,14 @@
     return { exportToFile, parse, overwrite, merge };
   })();
 
+  // Elements in index.html's static markup name their leading icon via
+  // data-icon (and an optional data-icon-size) instead of inlining SVG,
+  // so every icon comes from Icons.
+  document.querySelectorAll("[data-icon]").forEach((el) => {
+    const size = el.dataset.iconSize ? Number(el.dataset.iconSize) : undefined;
+    el.insertAdjacentHTML("afterbegin", icon(el.dataset.icon, size));
+  });
+
   const appMenuEl = $(".app-menu");
   const appMenuToggleEl = $("#app-menu-toggle");
 
