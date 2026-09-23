@@ -23,6 +23,7 @@ Just open `index.html` in your browser, or use the hosted version at https://kg8
 - **Responsive Layout**: Sticky add-timer form while scrolling, and a compact per-row "more actions" menu on narrow screens
 - **Audio Notification**: Beeps when timers complete (using Web Audio API)
 - **Persistent Storage**: Timers are automatically saved in browser localStorage
+- **Export/Import**: Save timers and archived timers to a JSON file from the header menu and load it on another device or browser, either replacing the current ones or merging with them (skipping duplicates) — no account or server needed
 
 ## Tech
 
