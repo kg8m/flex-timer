@@ -82,7 +82,7 @@ h1 {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 6px;
-  gap: 6px;
+  gap: 2px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
@@ -90,8 +90,19 @@ h1 {
   display: flex;
 }
 
+/* Menu items read as plain text rows, as in a typical dropdown menu,
+         rather than as bordered buttons. Hover tints the row; keyboard focus
+         keeps the default focus ring. */
 .app-menu-popover button {
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   text-align: left;
+}
+
+.app-menu-popover button:hover {
+  background: rgba(156, 163, 175, 0.12);
 }
 
 .app-menu.open > button {
