@@ -1207,14 +1207,30 @@
           return false;
         }
 
+        if ("endAt" in t) {
+          const done = now >= t.endAt;
+          const scheduleChanged =
+            targetTime !== t.targetTime ||
+            intervalDays !== t.intervalDays ||
+            JSON.stringify(daysOfWeek || null) !==
+              JSON.stringify(t.daysOfWeek || null);
+
+          // A Done or Snoozed run keeps its current completion time as-is
+          // — editing only updates the definition for the next
+          // Restart/Skip. A still counting-down run only jumps to the
+          // freshly computed completion when the schedule itself
+          // changed, so editing just the title (or other fields)
+          // doesn't undo an earlier Skip.
+          if (!done && !t.snoozed && scheduleChanged) {
+            t.endAt = endAt;
+            t.notified = false;
+            t.snoozed = false;
+          }
+        }
+
         t.targetTime = targetTime;
         t.daysOfWeek = daysOfWeek;
         t.intervalDays = intervalDays;
-        if ("endAt" in t) {
-          t.endAt = endAt;
-          t.notified = false;
-          t.snoozed = false;
-        }
       } else {
         const dur = Duration.parseDuration(valueInput.value);
 
@@ -1787,9 +1803,9 @@
         // .when picks up a "snoozed" class from t.snoozed so a
         // snoozed run's Ends At time stays visually distinct even
         // after it reaches Done again — t.snoozed is only cleared by
-        // Restart or Edit (see EditForm.apply), which define a
-        // genuinely new run, deliberately not by tick()'s
-        // natural-completion branch.
+        // Restart, or by Edit when it recomputes the completion time
+        // (see EditForm.apply), which define a genuinely new run,
+        // deliberately not by tick()'s natural-completion branch.
         const restOfRowHtml =
           t.id === snoozingId
             ? SnoozeForm.html()
