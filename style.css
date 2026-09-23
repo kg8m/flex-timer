@@ -94,6 +94,9 @@ h1 {
    rather than as bordered buttons. Hover tints the row; keyboard focus
    keeps the default focus ring. */
 .app-menu-popover button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   height: 36px;
   border: 0;
   border-radius: 8px;
