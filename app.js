@@ -3075,7 +3075,66 @@
       renderArchived();
     }
 
-    return { exportToFile, parse, overwrite };
+    /**
+     * What makes two timers "the same" for merge's duplicate check:
+     * their settings plus the timestamp of the run/archival they came
+     * from. Live-run fields (endAt/paused/notified/...) are left out, so
+     * pausing or snoozing a previously imported timer doesn't stop a
+     * re-import of the same file from recognizing it.
+     *
+     * @param {ActiveTimer|ArchivedTimer} t
+     * @param {number} stamp - createdAt for active timers, archivedAt for archived ones.
+     * @returns {string}
+     */
+    function identityKey(t, stamp) {
+      return JSON.stringify([
+        t.title,
+        t.tags,
+        t.mode,
+        t.originalDuration,
+        t.targetTime,
+        t.daysOfWeek,
+        t.intervalDays,
+        stamp,
+      ]);
+    }
+
+    /**
+     * Appends `incoming` items not already in `existing` (per
+     * identityKey), each with a fresh id: ids are per-device sequences,
+     * so the file's ids can collide with local ones.
+     *
+     * @template {ActiveTimer|ArchivedTimer} T
+     * @param {T[]} existing
+     * @param {T[]} incoming
+     * @param {(t: T) => number} stampOf
+     * @returns {T[]}
+     */
+    function mergeList(existing, incoming, stampOf) {
+      const keys = new Set(existing.map((t) => identityKey(t, stampOf(t))));
+      const added = incoming
+        .filter((t) => !keys.has(identityKey(t, stampOf(t))))
+        .map((t) => ({ ...t, id: seq++ }));
+      return [...existing, ...added];
+    }
+
+    /**
+     * Adds `data`'s active and archived timers to the current ones,
+     * skipping any already present so importing the same file twice
+     * doesn't duplicate them.
+     *
+     * @param {ReturnType<typeof parse>} data
+     */
+    function merge(data) {
+      timers = mergeList(timers, data.timers, (t) => t.createdAt);
+      archived = mergeList(archived, data.archived, (t) => t.archivedAt);
+
+      Storage.save();
+      renderActive();
+      renderArchived();
+    }
+
+    return { exportToFile, parse, overwrite, merge };
   })();
 
   const appMenuEl = $(".app-menu");
@@ -3143,6 +3202,8 @@
   importDialogEl.addEventListener("close", () => {
     if (importDialogEl.returnValue === "overwrite") {
       Backup.overwrite(pendingImport);
+    } else if (importDialogEl.returnValue === "merge") {
+      Backup.merge(pendingImport);
     }
     pendingImport = null;
   });

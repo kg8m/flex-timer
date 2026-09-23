@@ -63,11 +63,13 @@
             <!-- File summary goes here: set by #import-file's change handler -->
           </p>
           <p class="help">
-            Overwrite replaces all current timers and archived timers. Trash is
-            kept as is.
+            Merge adds the file’s timers to the current ones, skipping any
+            already present. Overwrite replaces all current timers and archived
+            timers. Trash is kept as is either way.
           </p>
           <div class="dialog-actions">
             <button class="neutral" value="cancel">Cancel</button>
+            <button class="accent" value="merge">Merge</button>
             <button class="danger" value="overwrite">Overwrite</button>
           </div>
         </form>
