@@ -52,9 +52,9 @@ h1 {
 }
 
 /* Page-level menu (Export/Import) in the header's otherwise empty right
-         side. Same open/close mechanism as .row-menu (an .open class
-         toggled by the script), but right-aligned under its toggle since
-         it sits at the page's right edge. */
+   side. Same open/close mechanism as .row-menu (an .open class
+   toggled by the script), but right-aligned under its toggle since
+   it sits at the page's right edge. */
 .app-menu {
   position: relative;
   margin-left: auto;
@@ -91,8 +91,8 @@ h1 {
 }
 
 /* Menu items read as plain text rows, as in a typical dropdown menu,
-         rather than as bordered buttons. Hover tints the row; keyboard focus
-         keeps the default focus ring. */
+   rather than as bordered buttons. Hover tints the row; keyboard focus
+   keeps the default focus ring. */
 .app-menu-popover button {
   height: 36px;
   border: 0;
@@ -175,17 +175,17 @@ h1 {
 }
 
 /* Always its own full line, regardless of viewport width, so the 7
-         day pills never have to share horizontal space with Title/At time. */
+   day pills never have to share horizontal space with Title/At time. */
 #weekday-field {
   flex: 1 1 100%;
 }
 
 /* At narrow widths every .row child already gets its own line, so
-         source order alone reads correctly: Title, At time, Days of week,
-         then Add last. At wide widths Title/At time/Add share one line
-         instead (#weekday-field's 100% basis still forces it to its own
-         line below) — pulling Add ahead of #weekday-field in visual order
-         is what makes that happen without changing the DOM/tab order. */
+   source order alone reads correctly: Title, At time, Days of week,
+   then Add last. At wide widths Title/At time/Add share one line
+   instead (#weekday-field's 100% basis still forces it to its own
+   line below) — pulling Add ahead of #weekday-field in visual order
+   is what makes that happen without changing the DOM/tab order. */
 @media (min-width: 641px) {
   #weekday-field {
     order: 1;
@@ -214,9 +214,9 @@ h1 {
 }
 
 /* Each radio and its label are siblings, not label-wrapped (a
-         radiogroup's owned elements must have the radio role directly,
-         not nested inside a role-less label), so the 4px/16px spacing
-         that used to come from nested flex gaps is now explicit margins. */
+   radiogroup's owned elements must have the radio role directly,
+   not nested inside a role-less label), so the 4px/16px spacing
+   that used to come from nested flex gaps is now explicit margins. */
 .mode-toggle-row label {
   margin-right: 16px;
   font-size: 13px;
@@ -239,8 +239,8 @@ h1 {
 }
 
 /* Native checkboxes, visually hidden but still focusable/keyboard-
-         operable; the sibling label is styled as the toggle pill, matching
-         .tag-filter-chip's active/inactive treatment below. */
+   operable; the sibling label is styled as the toggle pill, matching
+   .tag-filter-chip's active/inactive treatment below. */
 .weekday-toggle-row input[type="checkbox"] {
   position: absolute;
   opacity: 0;
@@ -322,7 +322,7 @@ button:hover {
 }
 
 /* Icons are inline SVG (see icon() in the script); align them like text
-         instead of sitting on the default SVG baseline. */
+   instead of sitting on the default SVG baseline. */
 svg {
   vertical-align: middle;
 }
@@ -381,8 +381,8 @@ button.neutral:hover {
 }
 
 /* Icon-only action buttons (Pause/Resume/Restart/Archive/Delete/Restore),
-         also matches the row-menu toggle (see .row-menu below), a <button>
-         nested inside .controls. */
+   also matches the row-menu toggle (see .row-menu below), a <button>
+   nested inside .controls. */
 .controls button {
   box-sizing: border-box;
   padding: 8px;
@@ -401,13 +401,13 @@ button.neutral:hover {
 }
 
 /* A list's "no items" message (#timers-empty/#trash-empty/#archive-empty).
-         margin-bottom matches .tag-filter's own margin-bottom above it, so
-         the message sits centered in an even gap instead of crowding
-         straight into the card's bottom padding when it's the last thing
-         showing (filtered down to zero items, with no header/footer/rows
-         below it to add their own spacing). The inline "Clear filter"
-         button (see TagFilter.renderEmptyState()) needs its own row to sit
-         in, hence flex + gap rather than plain inline content. */
+   margin-bottom matches .tag-filter's own margin-bottom above it, so
+   the message sits centered in an even gap instead of crowding
+   straight into the card's bottom padding when it's the last thing
+   showing (filtered down to zero items, with no header/footer/rows
+   below it to add their own spacing). The inline "Clear filter"
+   button (see TagFilter.renderEmptyState()) needs its own row to sit
+   in, hence flex + gap rather than plain inline content. */
 .list-empty {
   display: flex;
   align-items: center;
@@ -417,10 +417,10 @@ button.neutral:hover {
 }
 
 /* .tag-filter-clear's own margin-bottom (see the shared
-         .tag-filter-chip/.tag-filter-clear rule) exists for the chip bar's
-         wrapped rows and isn't wanted on this bare flex row — left in
-         place, it throws off align-items: center by making the button's
-         margin box taller than its content box on one side only. */
+   .tag-filter-chip/.tag-filter-clear rule) exists for the chip bar's
+   wrapped rows and isn't wanted on this bare flex row — left in
+   place, it throws off align-items: center by making the button's
+   margin box taller than its content box on one side only. */
 .list-empty .tag-filter-clear {
   margin: 0;
 }
@@ -430,10 +430,10 @@ button.neutral:hover {
 }
 
 /* <summary> header for each collapsible card (Timers/Archived/Trash).
-         Overriding `display` off the default `list-item` suppresses the
-         native disclosure triangle in Chrome/Firefox; Safari still needs the
-         ::-webkit-details-marker rule below. A CSS-drawn triangle replaces
-         it so the rotation animation works the same across browsers. */
+   Overriding `display` off the default `list-item` suppresses the
+   native disclosure triangle in Chrome/Firefox; Safari still needs the
+   ::-webkit-details-marker rule below. A CSS-drawn triangle replaces
+   it so the rotation animation works the same across browsers. */
 .list-summary {
   display: flex;
   align-items: center;
@@ -444,24 +444,24 @@ button.neutral:hover {
 }
 
 /* Only needed to separate the summary from the content below it, so
-         skip it while collapsed — otherwise the bottom padding reads larger
-         than the top. */
+   skip it while collapsed — otherwise the bottom padding reads larger
+   than the top. */
 details[open] > .list-summary {
   margin-bottom: 10px;
 }
 
 /* Push the trailing help text to the right edge, leaving the title
-         flush left after the marker (a plain space-between would instead
-         split 3 flex items — marker/title/help — with the title stranded
-         in the middle). */
+   flush left after the marker (a plain space-between would instead
+   split 3 flex items — marker/title/help — with the title stranded
+   in the middle). */
 .list-summary .help {
   margin-left: auto;
 }
 
 /* role="heading" span instead of an actual h2: <summary>'s content
-         model only permits phrasing content, or a single heading element
-         with nothing else alongside it — not a heading plus this .help
-         text, so the heading semantics are applied via ARIA instead. */
+   model only permits phrasing content, or a single heading element
+   with nothing else alongside it — not a heading plus this .help
+   text, so the heading semantics are applied via ARIA instead. */
 .list-summary .list-title {
   font-size: 16px;
   font-weight: bold;
@@ -488,14 +488,14 @@ details[open] > .list-summary::before {
 }
 
 /* Controls column (282px) is wide enough to fit its icon buttons on
-         one line even in the busiest state — a snoozed, still-running
-         Duration timer showing Pause/Restart/Snooze/Edit/Archive/Delete:
-         6 × 36px buttons + 5 × 8px gaps = 256px, + ~26px breathing room.
-         Ends At/Remaining (196px = two 94px halves + 8px gap; 94px = 78px
-         measured max content for "999:59:59" + 16px breathing room) and
-         Status (72px = 64px measured max content for bold "Running" + 8px
-         breathing room) are fixed so the Title column (the only flexible
-         track) can claim all remaining space. */
+   one line even in the busiest state — a snoozed, still-running
+   Duration timer showing Pause/Restart/Snooze/Edit/Archive/Delete:
+   6 × 36px buttons + 5 × 8px gaps = 256px, + ~26px breathing room.
+   Ends At/Remaining (196px = two 94px halves + 8px gap; 94px = 78px
+   measured max content for "999:59:59" + 16px breathing room) and
+   Status (72px = 64px measured max content for bold "Running" + 8px
+   breathing room) are fixed so the Title column (the only flexible
+   track) can claim all remaining space. */
 .timer {
   display: grid;
   grid-template-columns: 1fr 196px 72px 282px;
@@ -507,8 +507,8 @@ details[open] > .list-summary::before {
 }
 
 /* Ends At + Remaining share one column: give each a fixed-width half so
-         one row's Remaining text isn't pushed by another row's differently
-         sized Ends At text (e.g. a paused "--:--:--" vs. a real time) */
+   one row's Remaining text isn't pushed by another row's differently
+   sized Ends At text (e.g. a paused "--:--:--" vs. a real time) */
 .when-remain {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -516,14 +516,14 @@ details[open] > .list-summary::before {
 }
 
 /* Same reasoning as .when-remain, applied to the archive list's
-         Set + Archived At column. Set and Archived At aren't equal width:
-         Archived At renders a fixed HH:MM:SS timestamp (same 94px bound as
-         .when-remain), but Set renders formatTimerLabel's "Nd Nh Nm Ns"
-         duration label, which needs more room. 137px = 120.7px measured max
-         content for "9d 23h 59m 59s" (the practical bound — same
-         "big enough" reasoning as Ends At/Remaining's 999:59:59; double-digit
-         day counts still wrap) at this row's 16px font, + 16px breathing
-         room. */
+   Set + Archived At column. Set and Archived At aren't equal width:
+   Archived At renders a fixed HH:MM:SS timestamp (same 94px bound as
+   .when-remain), but Set renders formatTimerLabel's "Nd Nh Nm Ns"
+   duration label, which needs more room. 137px = 120.7px measured max
+   content for "9d 23h 59m 59s" (the practical bound — same
+   "big enough" reasoning as Ends At/Remaining's 999:59:59; double-digit
+   day counts still wrap) at this row's 16px font, + 16px breathing
+   room. */
 .set-archived {
   display: grid;
   grid-template-columns: 137px 94px;
@@ -536,19 +536,19 @@ details[open] > .list-summary::before {
 }
 
 /* Set (formatTimerLabel — same content and 137px width as Archive's
-         Set column, see .set-archived above) and Purges In (84px = 68px
-         measured max content for "00:04:59"/"00:05:00", the longest values
-         reachable within the 5-minute TRASH_RETENTION_MS, + 16px breathing
-         room) are fixed so Title (the only flexible track) can claim all
-         remaining space — same fix as .timer's Ends At/Remaining/Status
-         columns above. */
+   Set column, see .set-archived above) and Purges In (84px = 68px
+   measured max content for "00:04:59"/"00:05:00", the longest values
+   reachable within the 5-minute TRASH_RETENTION_MS, + 16px breathing
+   room) are fixed so Title (the only flexible track) can claim all
+   remaining space — same fix as .timer's Ends At/Remaining/Status
+   columns above. */
 .timer.trash-row {
   grid-template-columns: 1fr 137px 84px 70px;
 }
 
 /* Set (137px) + Archived At (94px) + .set-archived's 8px gap = 239px,
-         fixed so Title (the only flexible track) can claim all remaining
-         space — same fix as .timer's Ends At/Remaining/Status columns above. */
+   fixed so Title (the only flexible track) can claim all remaining
+   space — same fix as .timer's Ends At/Remaining/Status columns above. */
 .timer.archive-row {
   grid-template-columns: 1fr 239px 154px;
 }
@@ -652,24 +652,24 @@ details[open] > .list-summary::before {
 }
 
 /* "More actions" dropdown, shown only at narrow widths (see the
-         media query below) to group less-frequently-used row actions
-         (currently Edit/Archive) behind a single toggle, so the Controls
-         column doesn't need extra width per action added. At normal
-         widths the toggle+popover stay hidden entirely and the row's own
-         plain, always-visible Edit/Archive buttons (marked with
-         .wide-action) are what's shown instead — the two groups are
-         separate DOM nodes, never the same buttons reparented via CSS. */
+   media query below) to group less-frequently-used row actions
+   (currently Edit/Archive) behind a single toggle, so the Controls
+   column doesn't need extra width per action added. At normal
+   widths the toggle+popover stay hidden entirely and the row's own
+   plain, always-visible Edit/Archive buttons (marked with
+   .wide-action) are what's shown instead — the two groups are
+   separate DOM nodes, never the same buttons reparented via CSS. */
 .row-menu {
   display: none;
   position: relative;
 }
 
 /* Floats over the row instead of pushing Delete/other columns
-         around when opened — opening the menu must not reflow the row.
-         Centered under the toggle (rather than right: 0, which aligns the
-         padded box edge, not the icon column inside it) so the stacked
-         Edit/Archive icons form one visual column with the toggle's own
-         icon regardless of this popover's padding. */
+   around when opened — opening the menu must not reflow the row.
+   Centered under the toggle (rather than right: 0, which aligns the
+   padded box edge, not the icon column inside it) so the stacked
+   Edit/Archive icons form one visual column with the toggle's own
+   icon regardless of this popover's padding. */
 .row-menu-popover {
   display: none;
   flex-direction: column;
@@ -692,13 +692,13 @@ details[open] > .list-summary::before {
 }
 
 /* Make the open state obvious at a glance, matching the neutral
-         (non-accent) hover tint already used for .tag-filter-chip. */
+   (non-accent) hover tint already used for .tag-filter-chip. */
 .row-menu.open > button {
   background: rgba(156, 163, 175, 0.12);
 }
 
 /* Inline edit form that replaces a row's normal content, spanning all
-         of that row's grid columns regardless of how many it has. */
+   of that row's grid columns regardless of how many it has. */
 .edit-row {
   grid-column: 1 / -1;
   display: flex;
@@ -708,23 +708,23 @@ details[open] > .list-summary::before {
 }
 
 /* Snooze form: title stays put, but everything after it (Ends At/
-         Remaining/Status/Controls) is replaced by this form, so it only
-         needs to span from the second column onward, not the whole row. */
+   Remaining/Status/Controls) is replaced by this form, so it only
+   needs to span from the second column onward, not the whole row. */
 .snooze-row {
   grid-column: 2 / -1;
 }
 
 /* Pushes Confirm/Cancel to the row's right edge (to match Edit's own
-         Save/Cancel, which land there as a side effect of its growing
-         title/value inputs) instead of leaving the rest of this wide
-         column empty next to a left-clustered label/input/label group. */
+   Save/Cancel, which land there as a side effect of its growing
+   title/value inputs) instead of leaving the rest of this wide
+   column empty next to a left-clustered label/input/label group. */
 .snooze-row .controls {
   margin-left: auto;
 }
 
 /* Shown only at the narrow breakpoint below (see .snooze-label-wide
-         there), where the full "Snooze for …" wording doesn't fit on one
-         line alongside the input and its two buttons. */
+   there), where the full "Snooze for …" wording doesn't fit on one
+   line alongside the input and its two buttons. */
 .snooze-label-narrow {
   display: none;
 }
@@ -745,7 +745,7 @@ details[open] > .list-summary::before {
 }
 
 /* Its own line below the title/value inputs, not squeezed onto
-         their line by .edit-row's flex-wrap. */
+   their line by .edit-row's flex-wrap. */
 .edit-row .weekday-toggle-row {
   flex: 1 1 100%;
 }
@@ -757,18 +757,18 @@ details[open] > .list-summary::before {
 }
 
 /* Unlike the Duration text input, a native time widget can't reflow
-         its HH:MM:SS segments — shrinking it below its real content width
-         just clips the seconds digits instead of resizing them. 140px is
-         the measured minimum where Chromium renders "15:30:45" plus its
-         clock-icon affordance in full, inside this input's own 12px
-         horizontal padding. */
+   its HH:MM:SS segments — shrinking it below its real content width
+   just clips the seconds digits instead of resizing them. 140px is
+   the measured minimum where Chromium renders "15:30:45" plus its
+   clock-icon affordance in full, inside this input's own 12px
+   horizontal padding. */
 .edit-row input[type="time"] {
   min-width: 140px;
 }
 
 /* Styled like a trailing `.timer` row (border-top + same vertical
-         padding) so it reads as part of the list's rhythm instead of a
-         floating block with a big gap above it. */
+   padding) so it reads as part of the list's rhythm instead of a
+   floating block with a big gap above it. */
 .footer {
   border-top: 1px solid var(--border);
   padding: 10px 0;
@@ -780,10 +780,10 @@ details[open] > .list-summary::before {
 }
 
 /* z-index: 0 (not just position: relative) so this establishes its
-         own stacking context — otherwise .tag-filter-toggle-label's
-         z-index: 1 below escapes all the way up to the root stacking
-         context, where it ties with .sticky-form's z-index: 1 and wins
-         on DOM order (later element), overlapping the sticky form. */
+   own stacking context — otherwise .tag-filter-toggle-label's
+   z-index: 1 below escapes all the way up to the root stacking
+   context, where it ties with .sticky-form's z-index: 1 and wins
+   on DOM order (later element), overlapping the sticky form. */
 .tag-filter {
   position: relative;
   z-index: 0;
@@ -800,30 +800,30 @@ details[open] > .list-summary::before {
 }
 
 /* A block (not flex) formatting context, so the "Show all/fewer
-         tags" toggle below can be floated at the top-right with chips
-         wrapping around it the way text wraps around a floated image —
-         flexbox has no equivalent of that. display: flow-root (rather
-         than plain block) also contains the float for this container's
-         own height, so it still grows to fit every row once expanded.
-         font-size: 0 cancels out the whitespace text nodes between each
-         chip in the generated markup, which would otherwise add their
-         own (unwanted) width/height now that chips lay out as inline
-         text rather than flex items; each chip restores its own
-         font-size below. */
+   tags" toggle below can be floated at the top-right with chips
+   wrapping around it the way text wraps around a floated image —
+   flexbox has no equivalent of that. display: flow-root (rather
+   than plain block) also contains the float for this container's
+   own height, so it still grows to fit every row once expanded.
+   font-size: 0 cancels out the whitespace text nodes between each
+   chip in the generated markup, which would otherwise add their
+   own (unwanted) width/height now that chips lay out as inline
+   text rather than flex items; each chip restores its own
+   font-size below. */
 .tag-filter-chips {
   display: flow-root;
   font-size: 0;
 }
 
 /* Collapsed by default once there are enough tags to wrap past one
-         row (see TagFilter.renderChips(), which measures scrollHeight
-         against this same one-row height to decide whether to show the
-         "Show all tags" toggle at all). While collapsed, the toggle is
-         rendered as a sibling (not a child in the flow here) and
-         overlaid on top of this row instead of floating inside it —
-         see ".tag-filter-chips.collapsed ~ .tag-filter-toggle" below —
-         so it visibly covers the tail end of the row it's truncating,
-         as a cue that there's more beyond it. */
+   row (see TagFilter.renderChips(), which measures scrollHeight
+   against this same one-row height to decide whether to show the
+   "Show all tags" toggle at all). While collapsed, the toggle is
+   rendered as a sibling (not a child in the flow here) and
+   overlaid on top of this row instead of floating inside it —
+   see ".tag-filter-chips.collapsed ~ .tag-filter-toggle" below —
+   so it visibly covers the tail end of the row it's truncating,
+   as a cue that there's more beyond it. */
 .tag-filter-chips.collapsed {
   max-height: 32px; /* one chip row (26px) + its bottom margin (6px) */
   overflow: hidden;
@@ -877,16 +877,16 @@ details[open] > .list-summary::before {
 }
 
 /* Expanded state only (see TagFilter.renderChips(), which only
-         inserts the toggle as a child here — floated — when expanded;
-         the collapsed state overlays it instead, see below). Floated
-         top-right as the *first* child of .tag-filter-chips so every
-         chip after it in the markup wraps around it, the same way text
-         wraps around a floated image. Its height (matching a chip row)
-         means only the first row is affected; once wrapped chips clear
-         it, further rows use the full width. Horizontal padding is
-         slightly wider than the icon/text gap so the hover highlight
-         doesn't look tighter around the icon than the icon and text
-         are around each other. */
+   inserts the toggle as a child here — floated — when expanded;
+   the collapsed state overlays it instead, see below). Floated
+   top-right as the *first* child of .tag-filter-chips so every
+   chip after it in the markup wraps around it, the same way text
+   wraps around a floated image. Its height (matching a chip row)
+   means only the first row is affected; once wrapped chips clear
+   it, further rows use the full width. Horizontal padding is
+   slightly wider than the icon/text gap so the hover highlight
+   doesn't look tighter around the icon than the icon and text
+   are around each other. */
 .tag-filter-toggle {
   float: right;
   display: flex;
@@ -907,12 +907,12 @@ details[open] > .list-summary::before {
 }
 
 /* Wraps the icon+text so they paint as a *positioned* descendant
-         with an explicit stack level above ::before/::after below — per
-         the CSS stacking rules, a non-positioned descendant (plain
-         icon/text) always paints *before* any positioned one regardless
-         of DOM order, so without this wrapper the collapsed-state
-         ::before's opaque backdrop would render on top of the label
-         instead of behind it. */
+   with an explicit stack level above ::before/::after below — per
+   the CSS stacking rules, a non-positioned descendant (plain
+   icon/text) always paints *before* any positioned one regardless
+   of DOM order, so without this wrapper the collapsed-state
+   ::before's opaque backdrop would render on top of the label
+   instead of behind it. */
 .tag-filter-toggle-label {
   position: relative;
   z-index: 1;
@@ -922,13 +922,13 @@ details[open] > .list-summary::before {
 }
 
 /* Collapsed state only: overlaid on top of the one-row chip bar
-         (see the ".collapsed" rule above) instead of floating inside
-         it, so "Show all tags" visibly sits over the tail end of the
-         row — a cue that it's truncating, not just wrapping — while
-         staying right-aligned with the row's right edge. Its own
-         background stays transparent; ::before/::after below are what's
-         actually visible across this button's whole box, since they
-         fully cover it. */
+   (see the ".collapsed" rule above) instead of floating inside
+   it, so "Show all tags" visibly sits over the tail end of the
+   row — a cue that it's truncating, not just wrapping — while
+   staying right-aligned with the row's right edge. Its own
+   background stays transparent; ::before/::after below are what's
+   actually visible across this button's whole box, since they
+   fully cover it. */
 .tag-filter-chips.collapsed ~ .tag-filter-toggle {
   float: none;
   position: absolute;
@@ -938,12 +938,12 @@ details[open] > .list-summary::before {
 }
 
 /* The blur/fade backdrop for the chip(s) this toggle covers. This
-         (not the button's own background) is what's actually visible
-         across the button's own box (see above). mask-image fades this
-         layer's opacity — backdrop-filter and all — from 0 at its own
-         left edge up to fully opaque at the button's left edge, so the
-         blur ramps up gradually as chips approach the toggle instead of
-         switching on abruptly right at this box's edge. */
+   (not the button's own background) is what's actually visible
+   across the button's own box (see above). mask-image fades this
+   layer's opacity — backdrop-filter and all — from 0 at its own
+   left edge up to fully opaque at the button's left edge, so the
+   blur ramps up gradually as chips approach the toggle instead of
+   switching on abruptly right at this box's edge. */
 .tag-filter-chips.collapsed ~ .tag-filter-toggle::before {
   content: "";
   position: absolute;
@@ -960,10 +960,10 @@ details[open] > .list-summary::before {
 }
 
 /* The hover highlight, sized to exactly the button's own box
-         (unlike ::before above, which extends further left into the
-         blur/fade zone) so it can have rounded corners like every other
-         chip/toggle in this bar, and so hovering doesn't tint the
-         chip(s) ::before is fading out. */
+   (unlike ::before above, which extends further left into the
+   blur/fade zone) so it can have rounded corners like every other
+   chip/toggle in this bar, and so hovering doesn't tint the
+   chip(s) ::before is fading out. */
 .tag-filter-chips.collapsed ~ .tag-filter-toggle::after {
   content: "";
   position: absolute;
@@ -989,8 +989,8 @@ details[open] > .list-summary::before {
 }
 
 /* Custom tooltip: replaces the native `title` tooltip, whose show-delay
-         is browser-controlled (often 1-1.5s). Elements that want a hover/focus
-         tooltip carry data-tooltip="..." instead of title. */
+   is browser-controlled (often 1-1.5s). Elements that want a hover/focus
+   tooltip carry data-tooltip="..." instead of title. */
 [data-tooltip] {
   position: relative;
 }
@@ -1022,42 +1022,42 @@ details[open] > .list-summary::before {
 }
 
 /* .mode-badge sits at the left edge of each row, so a centered tooltip
-         can run off-screen on narrow viewports. Anchor it to the badge's
-         left edge instead. */
+   can run off-screen on narrow viewports. Anchor it to the badge's
+   left edge instead. */
 .mode-badge[data-tooltip]::after {
   left: -12px;
   transform: translateY(-6px);
 }
 
 /* .field label has overflow: hidden (for text-overflow: ellipsis on
-         long labels), which would otherwise clip the tooltip bubble. */
+   long labels), which would otherwise clip the tooltip bubble. */
 .field label[data-tooltip] {
   overflow: visible;
 }
 
 @media (max-width: 779px) {
   /* Ends At/Remaining stack vertically at this width (see .when-remain
-           override below), so — unlike the wide layout's two-column split —
-           one measured width covers both lines: 86px = 70px measured max
-           content for "999:59:59" at this breakpoint's 14px font (narrower
-           than the wide layout's 78px, which is measured at the 16px base
-           font size) + 16px breathing room. Fixing this column's width
-           (instead of leaving it a flexible track) keeps it hugging its
-           content instead of stretching with leftover whitespace that
-           pushed the Status dot off-center. Status is 18px = 14px measured
-           dot icon width + 4px breathing room — the header's "Status" label
-           is hidden via .status-text below, so the column only needs to fit
-           the dot. Title is left as the only flexible track, claiming all
-           remaining space (same fix as the wide layout's Title column
-           above). */
+     override below), so — unlike the wide layout's two-column split —
+     one measured width covers both lines: 86px = 70px measured max
+     content for "999:59:59" at this breakpoint's 14px font (narrower
+     than the wide layout's 78px, which is measured at the 16px base
+     font size) + 16px breathing room. Fixing this column's width
+     (instead of leaving it a flexible track) keeps it hugging its
+     content instead of stretching with leftover whitespace that
+     pushed the Status dot off-center. Status is 18px = 14px measured
+     dot icon width + 4px breathing room — the header's "Status" label
+     is hidden via .status-text below, so the column only needs to fit
+     the dot. Title is left as the only flexible track, claiming all
+     remaining space (same fix as the wide layout's Title column
+     above). */
   .timer {
     grid-template-columns: 1fr 86px 18px 122px;
     font-size: 14px;
   }
 
   /* Set is 124px = 107.3px measured max content for "9d 23h 59m 59s"
-           (see .set-archived above) at this breakpoint's 14px font, + 16px
-           breathing room. */
+     (see .set-archived above) at this breakpoint's 14px font, + 16px
+     breathing room. */
   .timer.trash-row {
     grid-template-columns: 1fr 124px 84px 60px;
   }
@@ -1096,8 +1096,8 @@ details[open] > .list-summary::before {
   }
 
   /* "Snooze for …" plus the input and its two buttons wraps onto a
-           second line at this width — swap to the shorter "Snooze:" so it
-           all still fits on one line. */
+     second line at this width — swap to the shorter "Snooze:" so it
+     all still fits on one line. */
   .snooze-label-wide {
     display: none;
   }
@@ -1125,21 +1125,21 @@ details[open] > .list-summary::before {
 }
 
 /* Between the two layouts above, the Title column was crashing to
-         ~120-210px: the ≤779px layout compresses every column (fixed costs
-         total 226px), but ≥780px jumps straight to the full desktop layout
-         (fixed costs total 550px, driven mostly by Controls' 282px for up
-         to 6 always-visible icon buttons) — a 324px cliff landing right at
-         780px, before Title has caught up. Rather than widen the ≤779px
-         layout's stacked/icon-status/small-font styling into this range
-         (which would look mobile-ish at laptop widths), only borrow its
-         Controls-collapsing behavior here: the same less-frequent actions
-         (Restart/Snooze/Edit/Archive) fold into the "…" menu, shrinking
-         Controls to 140px (124px content — the same "3 always-visible
-         buttons" ceiling as the ≤779px layout: Pause/Resume/Restart-when-
-         Done XOR Skip, plus Delete and the menu toggle, 3 × 36px + 2 × 8px
-         gaps — + 16px breathing room) while every other column, the font
-         size, and the row's non-stacked shape stay at their desktop
-         values. */
+   ~120-210px: the ≤779px layout compresses every column (fixed costs
+   total 226px), but ≥780px jumps straight to the full desktop layout
+   (fixed costs total 550px, driven mostly by Controls' 282px for up
+   to 6 always-visible icon buttons) — a 324px cliff landing right at
+   780px, before Title has caught up. Rather than widen the ≤779px
+   layout's stacked/icon-status/small-font styling into this range
+   (which would look mobile-ish at laptop widths), only borrow its
+   Controls-collapsing behavior here: the same less-frequent actions
+   (Restart/Snooze/Edit/Archive) fold into the "…" menu, shrinking
+   Controls to 140px (124px content — the same "3 always-visible
+   buttons" ceiling as the ≤779px layout: Pause/Resume/Restart-when-
+   Done XOR Skip, plus Delete and the menu toggle, 3 × 36px + 2 × 8px
+   gaps — + 16px breathing room) while every other column, the font
+   size, and the row's non-stacked shape stay at their desktop
+   values. */
 @media (min-width: 780px) and (max-width: 899px) {
   .timer {
     grid-template-columns: 1fr 196px 72px 140px;
